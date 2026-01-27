@@ -3,19 +3,264 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Piano Simulator + Tuner Test Bench</title>
+  <title>Piano Simulator + Tuner Test Bench (ET + Stretch)</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+<div class="wrap">
   <h1>Piano Simulator + Tuner Test Bench</h1>
-  <p class="muted">
-    Simulated piano + tuner testing environment (ET → Stretch workflow).
-  </p>
+  <div class="card muted">
+    This is a <b>simulated piano</b> (playable keyboard) plus a <b>test bench</b> for your tuner workflow:
+    <span class="pill">Capture → Compute Stretch</span> <span class="pill">Tune ET</span> <span class="pill">Tune to Stretch</span>.
+    <br><br>
+    Best setup: open this page on a laptop + play through speakers, and run your tuner app on your phone nearby.
+  </div>
 
-  <!-- UI markup intentionally minimal: this project focuses on logic + audio.
-       You can paste the full UI markup back in later if desired. -->
-  <div id="app"></div>
+  <div class="card">
+    <div class="tabs">
+      <button id="tabPlay" class="tab active">Play</button>
+      <button id="tabCapture" class="tab">Capture Sequence</button>
+      <button id="tabTune" class="tab">Tune Bench</button>
+    </div>
+  </div>
 
-  <script type="module" src="./js/main.js"></script>
+  <!-- ===== Keyboard (always visible) ===== -->
+  <div class="card">
+    <div class="row">
+      <label>Audio</label>
+      <div class="btns">
+        <button id="btnStartAudio" class="primary">Enable Audio</button>
+        <button id="btnStopAll" disabled>Stop All</button>
+      </div>
+    </div>
+
+    <div class="three" style="margin-top:12px;">
+      <div class="card" style="border-color:#eee;">
+        <div class="row">
+          <label for="wave">Waveform</label>
+          <select id="wave">
+            <option value="pianoish">piano-ish synth (recommended)</option>
+            <option value="sine">sine (clean reference)</option>
+            <option value="triangle">triangle</option>
+            <option value="sawtooth">sawtooth (stress)</option>
+            <option value="square">square (stress)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="poly">Polyphony</label>
+          <select id="poly">
+            <option value="8">8 voices</option>
+            <option value="16" selected>16 voices</option>
+            <option value="32">32 voices</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="vol">Volume</label>
+          <input id="vol" type="range" min="0" max="0.35" step="0.001" value="0.07" />
+        </div>
+        <div class="row">
+          <label for="sustain">Sustain</label>
+          <select id="sustain">
+            <option value="off">off</option>
+            <option value="on" selected>on (hold until released)</option>
+          </select>
+        </div>
+        <div class="muted mono" style="margin-top:8px;">
+          QWERTY (C4–B4): A W S E D F T G Y H U J
+        </div>
+      </div>
+
+      <div class="card" style="border-color:#eee;">
+        <div class="big">Pitch model</div>
+        <div class="row" style="margin-top:10px;">
+          <label for="a4">A4 reference (Hz)</label>
+          <input id="a4" type="range" min="432" max="446" step="0.1" value="440" />
+        </div>
+        <div class="mono">A4: <span id="a4v">440.0</span> Hz</div>
+
+        <div class="row" style="margin-top:10px;">
+          <label for="pianoReality">“Piano reality”</label>
+          <select id="pianoReality">
+            <option value="et">ET only (no hidden stretch)</option>
+            <option value="hidden" selected>ET + hidden stretch curve</option>
+            <option value="import">ET + imported curve (paste below)</option>
+          </select>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <label for="preset">Hidden curve preset</label>
+          <select id="preset">
+            <option value="mild">mild (low -10¢, high +20¢)</option>
+            <option value="medium" selected>medium (low -15¢, high +35¢)</option>
+            <option value="strong">strong (low -25¢, high +55¢)</option>
+          </select>
+        </div>
+
+        <div class="two" style="margin-top:10px;">
+          <div>
+            <div class="row"><label for="lowEx">Low extreme (¢)</label><input id="lowEx" type="range" min="-60" max="0" step="0.1" value="-15" /></div>
+            <div class="mono">Low: <span id="lowExV">-15.0</span> ¢</div>
+          </div>
+          <div>
+            <div class="row"><label for="highEx">High extreme (¢)</label><input id="highEx" type="range" min="0" max="90" step="0.1" value="35" /></div>
+            <div class="mono">High: <span id="highExV">35.0</span> ¢</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <label for="shape">Curve shape</label>
+          <input id="shape" type="range" min="0.7" max="2.7" step="0.01" value="1.6" />
+        </div>
+        <div class="mono">Shape: <span id="shapeV">1.60</span></div>
+      </div>
+
+      <div class="card" style="border-color:#eee;">
+        <div class="big">Debug readout</div>
+        <div class="mono" style="margin-top:10px;">
+          <div>Selected: <span id="selNote">—</span></div>
+          <div>ET Hz: <span id="dbgEt">—</span></div>
+          <div>Reality curve (¢): <span id="dbgRealityC">—</span></div>
+          <div>Reality Hz: <span id="dbgRealityHz">—</span></div>
+          <div>Detune (¢): <span id="dbgDetune">—</span></div>
+          <div>Output Hz: <span id="dbgOutHz">—</span></div>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          “Reality” = what the simulated piano is actually outputting (what your app hears).
+        </div>
+      </div>
+    </div>
+
+    <div class="kbd" style="margin-top:12px;">
+      <div class="muted" style="margin-bottom:8px;">
+        Click/tap keys to play. Scroll horizontally for the full keyboard.
+      </div>
+      <div id="keys" class="keys"></div>
+    </div>
+  </div>
+
+  <!-- ===== Play pane ===== -->
+  <div id="panePlay" class="card">
+    <div class="big">Play</div>
+    <div class="muted" style="margin-top:6px;">
+      Use this like a normal simulated piano. Use <b>piano-ish</b> for musical playing or <b>sine</b> for clean tuner testing.
+    </div>
+  </div>
+
+  <!-- ===== Capture pane ===== -->
+  <div id="paneCapture" class="card" style="display:none;">
+    <div class="big">Capture Sequence</div>
+    <div class="muted" style="margin-top:6px;">
+      This simulates the “record some notes” phase. The site will step through notes and sustain each tone for your app to capture.
+    </div>
+
+    <div class="two" style="margin-top:12px;">
+      <div class="card" style="border-color:#eee;">
+        <div class="row">
+          <label for="capPreset">Sequence preset</label>
+          <select id="capPreset">
+            <option value="A_octaves" selected>A’s by octave (A0–A7)</option>
+            <option value="C_octaves">C’s by octave (C1–C8)</option>
+            <option value="every_octave_root">C + F + A anchors</option>
+            <option value="every_6th">Every 6th key (fast sweep)</option>
+            <option value="custom">Custom list (paste below)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="capSeconds">Seconds per note</label>
+          <input id="capSeconds" type="range" min="1" max="8" step="0.5" value="3" />
+        </div>
+        <div class="mono">Hold: <span id="capSecondsV">3.0</span> s</div>
+
+        <div class="row" style="margin-top:10px;">
+          <label for="capGap">Gap between notes (ms)</label>
+          <input id="capGap" type="range" min="0" max="800" step="50" value="150" />
+        </div>
+        <div class="mono">Gap: <span id="capGapV">150</span> ms</div>
+
+        <div class="btns" style="margin-top:12px;">
+          <button id="capStart" class="primary">Start Sequence</button>
+          <button id="capNext" disabled>Next</button>
+          <button id="capRepeat" disabled>Repeat</button>
+          <button id="capStop" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:#eee;">
+        <div class="row">
+          <label>Now playing</label>
+          <div class="mono"><span id="capNow">—</span></div>
+        </div>
+        <div class="row">
+          <label>Progress</label>
+          <div class="mono"><span id="capProg">—</span></div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <label for="capCustom">Custom note list</label>
+          <div class="muted">Names like: A0, C4, F#3 (space/comma/newline)</div>
+        </div>
+        <textarea id="capCustom" placeholder="Example: A0 A1 A2 A3 A4 A5 A6 A7"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Tune bench pane ===== -->
+  <div id="paneTune" class="card" style="display:none;">
+    <div class="big">Tune Bench</div>
+    <div class="muted" style="margin-top:6px;">
+      This simulates tuning in two stages: <b>ET target</b> and <b>Stretch target</b>. You detune the simulated note, then use your app to guide it back.
+    </div>
+
+    <div class="two" style="margin-top:12px;">
+      <div class="card" style="border-color:#eee;">
+        <div class="row">
+          <label for="tuneTarget">Tuning target</label>
+          <select id="tuneTarget">
+            <option value="et" selected>ET (standard pitch)</option>
+            <option value="stretch">Stretch (calculated curve)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="detune">Detune current note (¢)</label>
+          <input id="detune" type="range" min="-100" max="100" step="0.1" value="0" />
+        </div>
+        <div class="mono">Detune: <span id="detuneV">0.0</span> ¢</div>
+
+        <div class="btns" style="margin-top:10px;">
+          <button data-step="-1" class="detStep">-1¢</button>
+          <button data-step="-0.1" class="detStep">-0.1¢</button>
+          <button data-step="0.1" class="detStep">+0.1¢</button>
+          <button data-step="1" class="detStep">+1¢</button>
+          <button id="btnRandomDetune">Random detune</button>
+          <button id="btnSnapToTarget">Snap to target</button>
+        </div>
+
+        <div class="muted" style="margin-top:10px;">
+          Tip: choose <b>ET</b> first, tune to 0¢ in your app, then switch to <b>Stretch</b> and tune again.
+        </div>
+      </div>
+
+      <div class="card" style="border-color:#eee;">
+        <div class="big">Curve import/export</div>
+        <div class="muted" style="margin-top:6px;">
+          If your app outputs <span class="mono">curveCents88</span>, paste it here to test “Tune to calculated stretch”.
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <label for="curveJson">Curve JSON</label>
+          <div class="btns">
+            <button id="btnExportTruth">Export current “truth”</button>
+            <button id="btnApplyImport" class="primary">Apply import</button>
+          </div>
+        </div>
+        <textarea id="curveJson" placeholder='{"a4Hz":440,"curveCents88":[...88 numbers...]}'></textarea>
+        <div id="importStatus" class="muted" style="margin-top:8px;">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
 </body>
 </html>
