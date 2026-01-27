@@ -1,0 +1,7 @@
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  margin: 16px;
+  background: #fafafa;
+}
+h1 { margin-bottom: 6px; }
+.muted { color: #666; }
