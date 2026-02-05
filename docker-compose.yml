@@ -1,9 +1,9 @@
 services:
   website:
     image: nginx:alpine
-    container_name: website
-    volumes:
-      - ./public:/usr/share/nginx/html:ro
+    container_name: piano
     ports:
       - "8081:80"
+    volumes:
+      - ./:/usr/share/nginx/html:ro
     restart: unless-stopped
