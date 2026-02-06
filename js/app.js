@@ -105,19 +105,26 @@ export function initApp() {
   const fmtC = (x) => x.toFixed(1);
 
   function updateDebug() {
-    ui.a4v.textContent = parseFloat(ui.a4.value).toFixed(1);
-    ui.lowExV.textContent = parseFloat(ui.lowEx.value).toFixed(1);
-    ui.highExV.textContent = parseFloat(ui.highEx.value).toFixed(1);
-    ui.shapeV.textContent = parseFloat(ui.shape.value).toFixed(2);
+    const setText = (el, text) => { if (el) el.textContent = text; };
 
-    ui.selNote.textContent = `${midiToName(selectedMidi)} (MIDI ${selectedMidi})`;
+    setText(ui.a4v, parseFloat(ui.a4.value).toFixed(1));
+    setText(ui.lowExV, parseFloat(ui.lowEx.value).toFixed(1));
+    setText(ui.highExV, parseFloat(ui.highEx.value).toFixed(1));
+    setText(ui.shapeV, parseFloat(ui.shape.value).toFixed(2));
 
-    const { et, realityC, realityHz, detuneC, outHz } = getOutputHz(ui, importedCurve, detuneMap, selectedMidi);
-    ui.dbgEt.textContent = fmtHz(et);
-    ui.dbgRealityC.textContent = fmtC(realityC);
-    ui.dbgRealityHz.textContent = fmtHz(realityHz);
-    ui.dbgDetune.textContent = fmtC(detuneC);
-    ui.dbgOutHz.textContent = fmtHz(outHz);
+    setText(ui.selNote, `${midiToName(selectedMidi)} (MIDI ${selectedMidi})`);
+
+    const { et, realityC, realityHz, detuneC, outHz } =
+      getOutputHz(ui, importedCurve, detuneMap, selectedMidi);
+
+    const fmtHz = (x) => x.toFixed(3);
+    const fmtC  = (x) => x.toFixed(1);
+
+    setText(ui.dbgEt, fmtHz(et));
+    setText(ui.dbgRealityC, fmtC(realityC));
+    setText(ui.dbgRealityHz, fmtHz(realityHz));
+    setText(ui.dbgDetune, fmtC(detuneC));
+    setText(ui.dbgOutHz, fmtHz(outHz));
   }
 
   function scheduleUpdate() {
