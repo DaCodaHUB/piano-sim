@@ -39,6 +39,7 @@
         <div class="row">
           <label for="wave">Waveform</label>
           <select id="wave">
+            <option value="piano_samples">piano (samples • best sound)</option>
             <option value="pianoish">piano-ish synth (recommended)</option>
             <option value="sine">sine (clean reference)</option>
             <option value="triangle">triangle</option>
@@ -56,7 +57,7 @@
         </div>
         <div class="row">
           <label for="vol">Volume</label>
-          <input id="vol" type="range" min="0" max="0.5" step="0.01" value="0.18" />
+          <input id="vol" type="range" min="0" max="0.35" step="0.001" value="0.07" />
         </div>
         <div class="row">
           <label for="sustain">Sustain</label>
@@ -261,6 +262,9 @@
   </div>
 </div>
 
-<script type="module" src="./js/main.js"></script>
+  <!-- Tone.js (for high-quality sampled piano) -->
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>

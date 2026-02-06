@@ -1,4 +1,39 @@
 import { getOutputHz } from './tuning.js';
+import { midiToName } from './midi.js';
+
+// High-quality sampled piano pack (MIT) via jsDelivr.
+// Files are pitched notes; Tone.Sampler repitches between them.
+const PIANO_BASE_URL = 'https://cdn.jsdelivr.net/npm/tonejs-instrument-piano-mp3@1.1.2/';
+const PIANO_URLS = {
+  C1: 'C1.mp3', 'C#1': 'Cs1.mp3', D1: 'D1.mp3', 'D#1': 'Ds1.mp3', E1: 'E1.mp3',
+  F1: 'F1.mp3', 'F#1': 'Fs1.mp3', G1: 'G1.mp3', 'G#1': 'Gs1.mp3', A1: 'A1.mp3', 'A#1': 'As1.mp3', B1: 'B1.mp3',
+
+  C2: 'C2.mp3', 'C#2': 'Cs2.mp3', D2: 'D2.mp3', 'D#2': 'Ds2.mp3', E2: 'E2.mp3',
+  F2: 'F2.mp3', 'F#2': 'Fs2.mp3', G2: 'G2.mp3', 'G#2': 'Gs2.mp3', A2: 'A2.mp3', 'A#2': 'As2.mp3', B2: 'B2.mp3',
+
+  C3: 'C3.mp3', 'C#3': 'Cs3.mp3', D3: 'D3.mp3', 'D#3': 'Ds3.mp3', E3: 'E3.mp3',
+  F3: 'F3.mp3', 'F#3': 'Fs3.mp3', G3: 'G3.mp3', 'G#3': 'Gs3.mp3', A3: 'A3.mp3', 'A#3': 'As3.mp3', B3: 'B3.mp3',
+
+  C4: 'C4.mp3', 'C#4': 'Cs4.mp3', D4: 'D4.mp3', 'D#4': 'Ds4.mp3', E4: 'E4.mp3',
+  F4: 'F4.mp3', 'F#4': 'Fs4.mp3', G4: 'G4.mp3', 'G#4': 'Gs4.mp3', A4: 'A4.mp3', 'A#4': 'As4.mp3', B4: 'B4.mp3',
+
+  C5: 'C5.mp3', 'C#5': 'Cs5.mp3', D5: 'D5.mp3', 'D#5': 'Ds5.mp3', E5: 'E5.mp3',
+  F5: 'F5.mp3', 'F#5': 'Fs5.mp3', G5: 'G5.mp3', 'G#5': 'Gs5.mp3', A5: 'A5.mp3', 'A#5': 'As5.mp3', B5: 'B5.mp3',
+
+  C6: 'C6.mp3', 'C#6': 'Cs6.mp3', D6: 'D6.mp3', 'D#6': 'Ds6.mp3', E6: 'E6.mp3',
+  F6: 'F6.mp3', 'F#6': 'Fs6.mp3', G6: 'G6.mp3', 'G#6': 'Gs6.mp3', A6: 'A6.mp3', 'A#6': 'As6.mp3', B6: 'B6.mp3',
+
+  C7: 'C7.mp3', 'C#7': 'Cs7.mp3', D7: 'D7.mp3', 'D#7': 'Ds7.mp3', E7: 'E7.mp3',
+  F7: 'F7.mp3', 'F#7': 'Fs7.mp3', G7: 'G7.mp3', 'G#7': 'Gs7.mp3', A7: 'A7.mp3', 'A#7': 'As7.mp3', B7: 'B7.mp3',
+
+  C8: 'C8.mp3',
+};
+
+function linearToDb(v) {
+  // Tone.Sampler.volume is in dB. Map a small linear slider into a useful dB range.
+  const x = Math.max(0.0005, v);
+  return 20 * Math.log10(x) + 12; // +12dB calibration for laptop/phone speakers
+}
 
 export class AudioEngine {
   constructor(ui, getState) {
@@ -8,9 +43,24 @@ export class AudioEngine {
     this.master = null;
     this.activeNotes = new Map(); // midi -> voice
     this.voicePool = [];
+
+    // Tone.js sampled piano
+    this.sampler = null;
+    this.samplerReady = false;
+    this._samplerReadyPromise = null;
+    this._samplerChain = null;
   }
 
   async enable() {
+    // Enable whichever engine is currently selected.
+    if (this.ui.wave.value === 'piano_samples') {
+      await this.ensureSampledPiano();
+      return;
+    }
+    await this.ensureSynth();
+  }
+
+  async ensureSynth() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain();
@@ -20,7 +70,62 @@ export class AudioEngine {
     if (this.ctx.state !== 'running') await this.ctx.resume();
   }
 
-  setVolume(v) { if (this.master) this.master.gain.value = v; }
+  async ensureSampledPiano() {
+    if (this.samplerReady) return;
+    if (this._samplerReadyPromise) return this._samplerReadyPromise;
+
+    // Tone.js is loaded globally via a script tag.
+    const Tone = window.Tone;
+    if (!Tone) {
+      console.warn('Tone.js not found. Did you include Tone.js before main.js?');
+      return;
+    }
+
+    this._samplerReadyPromise = (async () => {
+      // Must be called from a user gesture.
+      await Tone.start();
+
+      // Build a nicer chain: Sampler -> Compressor -> Reverb -> Destination
+      const comp = new Tone.Compressor(-18, 3);
+      const rev = new Tone.Reverb({ decay: 3.2, preDelay: 0.01, wet: 0.22 });
+      await rev.generate();
+
+      const sampler = new Tone.Sampler({
+        urls: PIANO_URLS,
+        baseUrl: PIANO_BASE_URL,
+        release: 1.2,
+        onload: () => {
+          this.samplerReady = true;
+        },
+      });
+
+      sampler.connect(comp);
+      comp.connect(rev);
+      rev.toDestination();
+
+      // Volume
+      sampler.volume.value = linearToDb(parseFloat(this.ui.vol.value));
+
+      this.sampler = sampler;
+      this._samplerChain = { comp, rev };
+
+      // If onload didn't fire (rare), mark ready once Tone reports loaded.
+      // Tone.Sampler has a `loaded` boolean in many versions.
+      const start = performance.now();
+      while (!this.samplerReady) {
+        if (sampler.loaded) { this.samplerReady = true; break; }
+        if (performance.now() - start > 15000) break;
+        await new Promise(r => setTimeout(r, 50));
+      }
+    })();
+
+    return this._samplerReadyPromise;
+  }
+
+  setVolume(v) {
+    if (this.master) this.master.gain.value = v;
+    if (this.sampler) this.sampler.volume.value = linearToDb(v);
+  }
   polyLimit() { return parseInt(this.ui.poly.value, 10); }
 
   makeVoice() {
@@ -64,7 +169,7 @@ export class AudioEngine {
     gainNode.gain.cancelScheduledValues(t);
     gainNode.gain.setValueAtTime(gainNode.gain.value, t);
     gainNode.gain.setTargetAtTime(1.0, t, 0.008);
-    gainNode.gain.setTargetAtTime(0.75, t + 0.06, 0.10);
+    gainNode.gain.setTargetAtTime(0.55, t + 0.06, 0.10);
   }
 
   envelopeOff(gainNode, hard=false) {
@@ -93,6 +198,12 @@ export class AudioEngine {
   }
 
   press(midi) {
+    const mode = this.ui.wave.value;
+    if (mode === 'piano_samples') {
+      this.pressSampled(midi);
+      return;
+    }
+
     if (!this.ctx) return;
     if (this.activeNotes.has(midi)) return;
 
@@ -108,7 +219,28 @@ export class AudioEngine {
     this.activeNotes.set(midi, v);
   }
 
+  async pressSampled(midi) {
+    if (this.activeNotes.has(midi)) return;
+    await this.ensureSampledPiano();
+    if (!this.sampler || !this.samplerReady) return;
+
+    // Best-sounding mode: play as a normal piano note (ignore hidden stretch/detune).
+    const note = midiToName(midi);
+    try {
+      this.sampler.triggerAttack(note, undefined, 0.95);
+      this.activeNotes.set(midi, { kind: 'sample', note });
+    } catch (e) {
+      console.warn('Sampler trigger failed', e);
+    }
+  }
+
   release(midi, hard=false) {
+    const mode = this.ui.wave.value;
+    if (mode === 'piano_samples') {
+      this.releaseSampled(midi, hard);
+      return;
+    }
+
     const v = this.activeNotes.get(midi);
     if (!v) return;
     const { sustainOn } = this.getState();
@@ -121,12 +253,34 @@ export class AudioEngine {
     this.activeNotes.delete(midi);
   }
 
+  releaseSampled(midi, hard=false) {
+    const v = this.activeNotes.get(midi);
+    if (!v || !this.sampler) return;
+    const { sustainOn } = this.getState();
+    if (sustainOn && !hard) {
+      // Let Tone's release tail handle it.
+      try { this.sampler.triggerRelease(v.note); } catch {}
+      this.activeNotes.delete(midi);
+      return;
+    }
+    try { this.sampler.triggerRelease(v.note); } catch {}
+    this.activeNotes.delete(midi);
+  }
+
   stopAll() {
+    const mode = this.ui.wave.value;
+    if (mode === 'piano_samples') {
+      for (const midi of Array.from(this.activeNotes.keys())) this.releaseSampled(midi, true);
+      this.activeNotes.clear();
+      return;
+    }
     for (const midi of Array.from(this.activeNotes.keys())) this.release(midi, true);
     this.activeNotes.clear();
   }
 
   retuneAll() {
+    // Sampled piano is musical-only (not used for tuning), so we don't live-retune it.
+    if (this.ui.wave.value === 'piano_samples') return;
     if (!this.ctx) return;
     const { importedCurve, detuneMap } = this.getState();
     for (const [midi, v] of this.activeNotes) {
