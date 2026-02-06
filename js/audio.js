@@ -1,9 +1,9 @@
 import { getOutputHz } from './tuning.js';
 import { midiToName } from './midi.js';
 
-// High-quality sampled piano pack (MIT) via jsDelivr.
+// High-quality sampled piano pack stored locally in /samples/piano (MP3).
 // Files are pitched notes; Tone.Sampler repitches between them.
-const PIANO_BASE_URL = 'https://cdn.jsdelivr.net/npm/tonejs-instrument-piano-mp3@1.1.2/';
+const PIANO_BASE_URL = './samples/piano/';
 const PIANO_URLS = {
   C1: 'C1.mp3', 'C#1': 'Cs1.mp3', D1: 'D1.mp3', 'D#1': 'Ds1.mp3', E1: 'E1.mp3',
   F1: 'F1.mp3', 'F#1': 'Fs1.mp3', G1: 'G1.mp3', 'G#1': 'Gs1.mp3', A1: 'A1.mp3', 'A#1': 'As1.mp3', B1: 'B1.mp3',
