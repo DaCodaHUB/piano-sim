@@ -134,8 +134,6 @@ export class AudioEngine {
       return;
     }
 
-    // IMPORTANT: On mobile, sample loading can take >15s on first run.
-    // We wait for Tone.loaded() so the sampler is *actually ready* before allowing playback.
     this._samplerReadyPromise = (async () => {
       // Must be called from a user gesture.
       await Tone.start();
@@ -149,6 +147,9 @@ export class AudioEngine {
         urls: PIANO_URLS,
         baseUrl: PIANO_BASE_URL,
         release: 1.2,
+        onload: () => {
+          this.samplerReady = true;
+        },
       });
 
       sampler.connect(comp);
@@ -161,9 +162,13 @@ export class AudioEngine {
       this.sampler = sampler;
       this._samplerChain = { comp, rev };
 
-      // Wait for ALL buffers to load (critical for mobile).
-      await Tone.loaded();
-      this.samplerReady = true;
+      // If onload didn't fire (rare), mark ready once Tone reports loaded.
+      const start = performance.now();
+      while (!this.samplerReady) {
+        if (sampler.loaded) { this.samplerReady = true; break; }
+        if (performance.now() - start > 15000) break;
+        await new Promise(r => setTimeout(r, 50));
+      }
     })();
 
     return this._samplerReadyPromise;
