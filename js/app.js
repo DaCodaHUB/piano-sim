@@ -237,7 +237,7 @@ export function initApp() {
   });
 
   ui.btnStartAudio.onclick = async () => {
-    await audio.unlock();
+    await audio.enable();
     ui.btnStartAudio.disabled = true;
     ui.btnStopAll.disabled = false;
     scheduleUpdate();
