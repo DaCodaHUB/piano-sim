@@ -30,9 +30,9 @@ const PIANO_URLS = {
 };
 
 function linearToDb(v) {
-  // v in [0..1]
-  const clamped = Math.max(0.0001, Math.min(1, v));
-  return 20 * Math.log10(clamped);
+  // Tone.Sampler.volume is in dB. Map a small linear slider into a useful dB range.
+  const x = Math.max(0.0005, v);
+  return 20 * Math.log10(x) + 12; // +12dB calibration for laptop/phone speakers
 }
 
 export class AudioEngine {
@@ -60,33 +60,6 @@ export class AudioEngine {
     await this.ensureSynth();
   }
 
-  disable() {
-    // Force the user to re-enable audio after mode changes.
-    // Stop ringing notes (both synth + sampler).
-    try { this.stopAll(); } catch (e) {}
-
-    // Suspend WebAudio context (synth modes).
-    try {
-      if (this.ctx && this.ctx.state === 'running') {
-        this.ctx.suspend();
-      }
-    } catch (e) {
-      console.warn('WebAudio suspend failed:', e);
-    }
-
-    // Suspend Tone.js context (sampled piano).
-    try {
-      const Tone = window.Tone;
-      const tctx = Tone?.getContext ? Tone.getContext() : Tone?.context;
-      const raw = tctx?.rawContext ?? tctx;
-      if (raw?.state === 'running' && raw?.suspend) {
-        raw.suspend();
-      }
-    } catch (e) {
-      console.warn('Tone suspend failed:', e);
-    }
-  }
-
   async ensureSynth() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -98,6 +71,9 @@ export class AudioEngine {
   }
 
   async ensureSampledPiano() {
+    if (this.samplerReady) return;
+    if (this._samplerReadyPromise) return this._samplerReadyPromise;
+
     // Tone.js is loaded globally via a script tag.
     const Tone = window.Tone;
     if (!Tone) {
@@ -105,20 +81,10 @@ export class AudioEngine {
       return;
     }
 
-    // Always make sure Tone's AudioContext is running (user gesture required).
-    try {
-      const tctx = Tone.getContext ? Tone.getContext() : Tone.context;
-      if (tctx && tctx.state !== 'running') {
-        await Tone.start();
-      }
-    } catch (e) {
-      console.warn('Tone.start() failed:', e);
-    }
-
-    if (this.samplerReady) return;
-    if (this._samplerReadyPromise) return this._samplerReadyPromise;
-
     this._samplerReadyPromise = (async () => {
+      // Must be called from a user gesture.
+      await Tone.start();
+
       // Build a nicer chain: Sampler -> Compressor -> Reverb -> Destination
       const comp = new Tone.Compressor(-18, 3);
       const rev = new Tone.Reverb({ decay: 3.2, preDelay: 0.01, wet: 0.22 });
@@ -160,7 +126,6 @@ export class AudioEngine {
     if (this.master) this.master.gain.value = v;
     if (this.sampler) this.sampler.volume.value = linearToDb(v);
   }
-
   polyLimit() { return parseInt(this.ui.poly.value, 10); }
 
   makeVoice() {
@@ -171,175 +136,166 @@ export class AudioEngine {
     const o2 = this.ctx.createOscillator();
     const o3 = this.ctx.createOscillator();
 
-    o1.type =
-      (this.ui.wave.value === 'sine') ? 'sine' :
-        (this.ui.wave.value === 'square') ? 'square' :
-          (this.ui.wave.value === 'sawtooth') ? 'sawtooth' :
-            (this.ui.wave.value === 'triangle') ? 'triangle' : 'sine';
+    o1.type = 'sine'; o2.type = 'sine'; o3.type = 'sine';
 
-    o2.type = o1.type;
-    o3.type = o1.type;
-
-    o1.detune.value = 0;
-    o2.detune.value = 0;
-    o3.detune.value = 0;
-
-    // Simple "piano-ish" detune stack for thickness.
-    const g1 = this.ctx.createGain(); g1.gain.value = 0.60;
+    const g1 = this.ctx.createGain(); g1.gain.value = 1.00;
     const g2 = this.ctx.createGain(); g2.gain.value = 0.30;
-    const g3 = this.ctx.createGain(); g3.gain.value = 0.10;
+    const g3 = this.ctx.createGain(); g3.gain.value = 0.12;
 
-    o1.connect(g1);
-    o2.connect(g2);
-    o3.connect(g3);
-
-    g1.connect(g);
-    g2.connect(g);
-    g3.connect(g);
-
-    // ADSR envelope on g.gain
+    o1.connect(g1).connect(g);
+    o2.connect(g2).connect(g);
+    o3.connect(g3).connect(g);
     g.connect(this.master);
 
-    o1.start();
-    o2.start();
-    o3.start();
-
-    return { g, o1, o2, o3, on: false, midi: null, hz: null };
+    o1.start(); o2.start(); o3.start();
+    return { g, o1, o2, o3, g1, g2, g3, midi: null, startedAt: 0 };
   }
 
-  pickVoice(midi) {
-    // If already active, reuse
-    if (this.activeNotes.has(midi)) return this.activeNotes.get(midi);
-
-    // Find free voice
-    let v = this.voicePool.find(x => !x.on);
-    if (!v) {
-      // Create new voice if under poly limit, else steal oldest
-      if (this.voicePool.length < this.polyLimit()) {
-        v = this.makeVoice();
-        this.voicePool.push(v);
-      } else {
-        // steal first active
-        v = this.voicePool.find(x => x.on) || this.voicePool[0];
-        this.envelopeOff(v);
-        this.activeNotes.delete(v.midi);
-      }
+  pickVoice() {
+    const limit = this.polyLimit();
+    if (this.voicePool.length < limit) {
+      const v = this.makeVoice();
+      this.voicePool.push(v);
+      return v;
     }
-
-    v.on = true;
-    v.midi = midi;
-    this.activeNotes.set(midi, v);
-    return v;
+    let oldest = null;
+    for (const v of this.voicePool) if (!oldest || v.startedAt < oldest.startedAt) oldest = v;
+    if (oldest && oldest.midi !== null) this.activeNotes.delete(oldest.midi);
+    return oldest;
   }
 
-  envelopeOn(v) {
-    const now = this.ctx.currentTime;
-    v.g.gain.cancelScheduledValues(now);
-    v.g.gain.setValueAtTime(v.g.gain.value, now);
-    v.g.gain.linearRampToValueAtTime(1.0, now + 0.005);
-    v.g.gain.exponentialRampToValueAtTime(0.35, now + 0.08);
+  envelopeOn(gainNode) {
+    const t = this.ctx.currentTime;
+    gainNode.gain.cancelScheduledValues(t);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, t);
+    gainNode.gain.setTargetAtTime(1.0, t, 0.008);
+    gainNode.gain.setTargetAtTime(0.55, t + 0.06, 0.10);
   }
 
-  envelopeOff(v) {
-    const now = this.ctx.currentTime;
-    v.g.gain.cancelScheduledValues(now);
-    v.g.gain.setValueAtTime(v.g.gain.value, now);
-    v.g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-    v.on = false;
+  envelopeOff(gainNode, hard=false) {
+    const t = this.ctx.currentTime;
+    gainNode.gain.cancelScheduledValues(t);
+    if (hard) { gainNode.gain.setValueAtTime(0.0, t); return; }
+    gainNode.gain.setTargetAtTime(0.0, t, 0.06);
   }
 
-  setVoiceHz(v, hz) {
-    v.hz = hz;
-    v.o1.frequency.setValueAtTime(hz, this.ctx.currentTime);
-    v.o2.frequency.setValueAtTime(hz * 2, this.ctx.currentTime);
-    v.o3.frequency.setValueAtTime(hz * 3, this.ctx.currentTime);
+  setVoiceHz(voice, hz) {
+    const t = this.ctx.currentTime;
+    const mode = this.ui.wave.value;
+    if (mode === 'pianoish') {
+      voice.o1.frequency.setTargetAtTime(hz, t, 0.01);
+      voice.o2.frequency.setTargetAtTime(hz * 2, t, 0.01);
+      voice.o3.frequency.setTargetAtTime(hz * 3, t, 0.01);
+      voice.o1.type = 'sine'; voice.o2.type = 'sine'; voice.o3.type = 'sine';
+      voice.g1.gain.value = 1.00; voice.g2.gain.value = 0.30; voice.g3.gain.value = 0.12;
+    } else {
+      voice.o1.type = mode; voice.o2.type = mode; voice.o3.type = mode;
+      voice.g1.gain.value = 1.0; voice.g2.gain.value = 0.0; voice.g3.gain.value = 0.0;
+      voice.o1.frequency.setTargetAtTime(hz, t, 0.01);
+      voice.o2.frequency.setTargetAtTime(hz, t, 0.01);
+      voice.o3.frequency.setTargetAtTime(hz, t, 0.01);
+    }
   }
 
   press(midi) {
-    if (this.ui.wave.value === 'piano_samples') {
+    const mode = this.ui.wave.value;
+    if (mode === 'piano_samples') {
       this.pressSampled(midi);
       return;
     }
 
     if (!this.ctx) return;
-    const s = this.getState();
-    const a4 = s.importedCurve?.a4 ?? null;
-    const hz = getOutputHz(a4 ?? 440, midi, s.importedCurve, s.detuneMap);
+    if (this.activeNotes.has(midi)) return;
 
-    const v = this.pickVoice(midi);
-    this.setVoiceHz(v, hz);
-    this.envelopeOn(v);
+    const v = this.pickVoice();
+    v.midi = midi;
+    v.startedAt = performance.now();
+
+    const { importedCurve, detuneMap } = this.getState();
+    const { outHz } = getOutputHz(this.ui, importedCurve, detuneMap, midi);
+    this.setVoiceHz(v, outHz);
+    this.envelopeOn(v.g);
+
+    this.activeNotes.set(midi, v);
   }
 
-  pressSampled(midi) {
-    const Tone = window.Tone;
-    if (!Tone || !this.sampler) return;
+  async pressSampled(midi) {
+    if (this.activeNotes.has(midi)) return;
+    await this.ensureSampledPiano();
+    if (!this.sampler || !this.samplerReady) return;
 
-    const s = this.getState();
-    const a4 = s.importedCurve?.a4 ?? null;
-    const outHz = getOutputHz(a4 ?? 440, midi, s.importedCurve, s.detuneMap);
-
-    // Tone.Sampler plays by note name; we want exact Hz.
-    // Use sampler.triggerAttackRelease with frequency directly.
-    const dur = 2.5; // seconds; release tail controlled by sampler.release
-    this.sampler.triggerAttackRelease(outHz, dur);
+    // Best-sounding mode: play as a normal piano note (ignore hidden stretch/detune).
+    const note = midiToName(midi);
+    try {
+      this.sampler.triggerAttack(note, undefined, 0.95);
+      this.activeNotes.set(midi, { kind: 'sample', note });
+    } catch (e) {
+      console.warn('Sampler trigger failed', e);
+    }
   }
 
-  release(midi) {
-    if (this.ui.wave.value === 'piano_samples') {
-      this.releaseSampled(midi);
+  release(midi, hard=false) {
+    const mode = this.ui.wave.value;
+    if (mode === 'piano_samples') {
+      this.releaseSampled(midi, hard);
       return;
     }
-    if (!this.ctx) return;
-    if (!this.activeNotes.has(midi)) return;
+
     const v = this.activeNotes.get(midi);
-    this.envelopeOff(v);
+    if (!v) return;
+    const { sustainOn } = this.getState();
+    if (sustainOn && !hard) {
+      this.envelopeOff(v.g, false);
+      this.activeNotes.delete(midi);
+      return;
+    }
+    this.envelopeOff(v.g, hard);
     this.activeNotes.delete(midi);
   }
 
-  releaseSampled(_midi) {
-    // For simple sampled piano mode we use triggerAttackRelease, so release is implicit.
+  releaseSampled(midi, hard=false) {
+    const v = this.activeNotes.get(midi);
+    if (!v || !this.sampler) return;
+    const { sustainOn } = this.getState();
+    if (sustainOn && !hard) {
+      // Let Tone's release tail handle it.
+      try { this.sampler.triggerRelease(v.note); } catch {}
+      this.activeNotes.delete(midi);
+      return;
+    }
+    try { this.sampler.triggerRelease(v.note); } catch {}
+    this.activeNotes.delete(midi);
   }
 
   stopAll() {
-    // Synth voices
-    if (this.ctx) {
-      for (const v of this.voicePool) {
-        try { this.envelopeOff(v); } catch (e) {}
-      }
+    const mode = this.ui.wave.value;
+    if (mode === 'piano_samples') {
+      for (const midi of Array.from(this.activeNotes.keys())) this.releaseSampled(midi, true);
       this.activeNotes.clear();
+      return;
     }
+    for (const midi of Array.from(this.activeNotes.keys())) this.release(midi, true);
+    this.activeNotes.clear();
+  }
 
-    // Sampled
-    if (this.sampler && this.sampler.releaseAll) {
-      try { this.sampler.releaseAll(); } catch (e) {}
+  retuneAll() {
+    // Sampled piano is musical-only (not used for tuning), so we don't live-retune it.
+    if (this.ui.wave.value === 'piano_samples') return;
+    if (!this.ctx) return;
+    const { importedCurve, detuneMap } = this.getState();
+    for (const [midi, v] of this.activeNotes) {
+      const { outHz } = getOutputHz(this.ui, importedCurve, detuneMap, midi);
+      this.setVoiceHz(v, outHz);
     }
   }
 
   trimVoices() {
     const limit = this.polyLimit();
-    if (this.voicePool.length <= limit) return;
-    // Turn off extra voices
-    for (let i = limit; i < this.voicePool.length; i++) {
-      const v = this.voicePool[i];
-      try { this.envelopeOff(v); } catch (e) {}
-      if (v.midi != null) this.activeNotes.delete(v.midi);
+    while (this.voicePool.length > limit) {
+      const v = this.voicePool.pop();
+      if (!v) continue;
+      try { v.o1.stop(); v.o2.stop(); v.o3.stop(); } catch {}
+      try { v.g.disconnect(); } catch {}
     }
-    this.voicePool.length = limit;
-  }
-
-  retuneAll() {
-    const s = this.getState();
-    const a4 = s.importedCurve?.a4 ?? null;
-
-    // Update synth voices
-    if (this.ctx) {
-      for (const [midi, v] of this.activeNotes.entries()) {
-        const hz = getOutputHz(a4 ?? 440, midi, s.importedCurve, s.detuneMap);
-        this.setVoiceHz(v, hz);
-      }
-    }
-
-    // Sampled: we trigger one-shots, so no continuous retune needed.
   }
 }
