@@ -114,11 +114,9 @@ export function initApp() {
 
     setText(ui.selNote, `${midiToName(selectedMidi)} (MIDI ${selectedMidi})`);
 
-    const { et, realityC, realityHz, detuneC, outHz } =
-      getOutputHz(ui, importedCurve, detuneMap, selectedMidi);
-
+    const { et, realityC, realityHz, detuneC, outHz } = getOutputHz(ui, importedCurve, detuneMap, selectedMidi);
     const fmtHz = (x) => x.toFixed(3);
-    const fmtC  = (x) => x.toFixed(1);
+    const fmtC = (x) => x.toFixed(1);
 
     setText(ui.dbgEt, fmtHz(et));
     setText(ui.dbgRealityC, fmtC(realityC));
