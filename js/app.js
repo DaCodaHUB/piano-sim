@@ -75,6 +75,30 @@ export function initApp() {
 
   const audio = new AudioEngine(ui, () => ({ importedCurve, detuneMap, selectedMidi, sustainOn }));
 
+  let iosUnlocked = false;
+
+  async function unlockIOSAudio() {
+    if (iosUnlocked) return;
+
+    await audio.enable(); // create + resume AudioContext
+
+    const ctx = audio.ctx;
+    if (!ctx) return;
+
+    // iOS needs a real sound event to unlock
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    g.gain.value = 0.0001; // inaudible
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.02);
+
+    iosUnlocked = true;
+  }
+
+  document.addEventListener("touchstart", unlockIOSAudio, { once: true, passive: true });
+  document.addEventListener("pointerdown", unlockIOSAudio, { once: true });
+
   function setTab(which) {
     ui.tabPlay.classList.remove('active');
     ui.tabCapture.classList.remove('active');
@@ -126,8 +150,13 @@ export function initApp() {
   ui.preset.onchange = () => applyPreset(ui.preset.value);
 
   function attachKeyHandlers(div, midi) {
-    const down = (e) => {
+    const down = async (e) => {
       e.preventDefault();
+
+      await unlockIOSAudio();
+      if (audio.ctx && audio.ctx.state !== "running") {
+        await audio.ctx.resume();
+      }
       selectedMidi = midi;
       syncTuneSliderFromSelected();
       updateDebug();
@@ -237,11 +266,12 @@ export function initApp() {
   });
 
   ui.btnStartAudio.onclick = async () => {
-    await audio.enable();
+    await unlockIOSAudio();
     ui.btnStartAudio.disabled = true;
     ui.btnStopAll.disabled = false;
     scheduleUpdate();
   };
+
   ui.btnStopAll.onclick = () => { audio.stopAll(); updateKeyHighlights(); updateDebug(); };
 
   ui.vol.oninput = () => audio.setVolume(parseFloat(ui.vol.value));
