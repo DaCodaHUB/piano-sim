@@ -4,6 +4,7 @@ export class AudioEngine {
   constructor(ui, getState) {
     this.ui = ui;
     this.getState = getState;
+    this._unlocked = false;
     this.ctx = null;
     this.master = null;
     this.activeNotes = new Map(); // midi -> voice
@@ -19,6 +20,24 @@ export class AudioEngine {
     }
     if (this.ctx.state !== 'running') await this.ctx.resume();
   }
+
+  async unlock() {
+    await this.enable();
+
+    // iOS unlock: play a tiny (nearly silent) buffer once
+    const ctx = this.ctx;
+    if (!ctx || this._unlocked) return;
+
+    const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.master);
+    source.start(0);
+    source.stop(0);
+
+    this._unlocked = true;
+  }
+
 
   setVolume(v) { if (this.master) this.master.gain.value = v; }
   polyLimit() { return parseInt(this.ui.poly.value, 10); }
