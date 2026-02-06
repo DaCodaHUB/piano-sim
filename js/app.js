@@ -126,13 +126,38 @@ export function initApp() {
   ui.preset.onchange = () => applyPreset(ui.preset.value);
 
   function attachKeyHandlers(div, midi) {
-    const down = (e) => {
+    const down = async (e) => {
       e.preventDefault();
       selectedMidi = midi;
       syncTuneSliderFromSelected();
       updateDebug();
-      // For synth modes we need the WebAudio context; for sampled piano we can play via Tone.js.
-      if (ui.wave.value !== "piano_samples" && !audio.ctx) return;
+
+      // Auto-enable audio on first interaction (makes mode-switching + reload feel reliable).
+      // - Synth modes need WebAudio ctx.
+      // - Sampled piano mode uses Tone.js (also requires a user gesture, which this is).
+      if (ui.wave.value !== "piano_samples" && !audio.ctx) {
+        try {
+          await audio.enable();
+          ui.btnStartAudio.disabled = true;
+          ui.btnStopAll.disabled = false;
+        } catch (err) {
+          console.warn("Audio enable failed", err);
+          return;
+        }
+      }
+
+      // For sampled piano, ensure Tone is started/loaded via the same gesture.
+      if (ui.wave.value === "piano_samples") {
+        try {
+          await audio.enable();
+          ui.btnStartAudio.disabled = true;
+          ui.btnStopAll.disabled = false;
+        } catch (err) {
+          console.warn("Sampler enable failed", err);
+          return;
+        }
+      }
+
       audio.press(midi);
       updateKeyHighlights();
     };
@@ -221,7 +246,15 @@ export function initApp() {
     selectedMidi = qwertyMap.get(k);
     syncTuneSliderFromSelected();
     updateDebug();
-    if (audio.ctx) {
+    // Auto-enable synth audio for computer-keyboard play.
+    if (ui.wave.value !== "piano_samples" && !audio.ctx) {
+      audio.enable().then(() => {
+        ui.btnStartAudio.disabled = true;
+        ui.btnStopAll.disabled = false;
+        audio.press(selectedMidi);
+        updateKeyHighlights();
+      }).catch(err => console.warn("Audio enable failed", err));
+    } else {
       audio.press(selectedMidi);
       updateKeyHighlights();
     }
@@ -230,25 +263,48 @@ export function initApp() {
     const k = (e.key || '').toUpperCase();
     if (!qwertyMap.has(k)) return;
     keysDown.delete(k);
-    if (audio.ctx) {
+    if (ui.wave.value === "piano_samples") {
+      audio.release(qwertyMap.get(k));
+      updateKeyHighlights();
+      updateDebug();
+    } else if (audio.ctx) {
       audio.release(qwertyMap.get(k));
       updateKeyHighlights();
       updateDebug();
     }
   });
 
-  ui.btnStartAudio.onclick = async () => {
-    await audio.enable();
-    ui.btnStartAudio.disabled = true;
-    ui.btnStopAll.disabled = false;
-    scheduleUpdate();
+  ui.btnStartAudio.onclick = () => {
+    audio.enable()
+      .then(() => {
+        ui.btnStartAudio.disabled = true;
+        ui.btnStopAll.disabled = false;
+        scheduleUpdate();
+      })
+      .catch((e) => {
+        console.warn('Audio enable failed:', e);
+      });
   };
   ui.btnStopAll.onclick = () => { audio.stopAll(); updateKeyHighlights(); updateDebug(); };
 
   ui.vol.oninput = () => audio.setVolume(parseFloat(ui.vol.value));
   ui.sustain.onchange = () => { sustainOn = (ui.sustain.value === 'on'); };
   ui.poly.onchange = () => { audio.trimVoices(); };
-  ui.wave.onchange = () => { scheduleUpdate(); };
+  ui.wave.onchange = () => {
+    // Some browsers drop "user gesture" privileges across async/await.
+    // Call enable() synchronously and handle the promise.
+    audio.enable()
+      .then(() => {
+        ui.btnStartAudio.disabled = true;
+        ui.btnStopAll.disabled = false;
+      })
+      .catch((e) => {
+        // Leave Start Audio enabled so the user can retry.
+        console.warn('Audio enable failed on wave change:', e);
+        ui.btnStartAudio.disabled = false;
+      });
+    scheduleUpdate();
+  };
 
   function syncTuneSliderFromSelected() {
     const c = detuneMap.get(selectedMidi) ?? 0;
