@@ -46,6 +46,27 @@ h1{ margin:0 0 10px 0; font-size: 20px; }
   padding: 12px;
 }
 
+/* Collapsible panels (used on mobile to reduce scrolling) */
+details.panel > summary{
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+}
+details.panel > summary::-webkit-details-marker{ display:none; }
+details.panel > summary::after{
+  content: "▾";
+  font-size: 14px;
+  opacity: 0.7;
+}
+details.panel[open] > summary::after{ content: "▴"; }
+details.panel > *:not(summary){
+  margin-top: 10px;
+}
+
 .row{
   display: grid;
   grid-template-columns: 1fr 220px;
@@ -187,15 +208,15 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 
   /* Bigger keys on phones (still scrollable) */
   :root{
-    --whiteW:32px;
-    --whiteH:200px;
-    --blackW:20px;
-    --blackH:120px;
-    --blackBottom:95px;
-    --keysHeight:210px;
+    --whiteW:44px;
+    --whiteH:230px;
+    --blackW:28px;
+    --blackH:150px;
+    --blackBottom:110px;
+    --keysHeight:245px;
     --keysPad:8px;
   }
 
-  .keylabel{ font-size: 11px; }
-  .keylabel.blackLbl{ font-size: 10px; }
+  .keylabel{ display:none; }
 }
+

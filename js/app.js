@@ -409,6 +409,16 @@ export function initApp() {
     ui.tuneTarget.addEventListener(ev, scheduleUpdate);
   });
 
+
+  // Desktop: keep advanced panels expanded. Mobile: keep them collapsed by default.
+  try{
+    if (window.matchMedia("(min-width: 861px)").matches){
+      document.querySelectorAll("details.panel").forEach(d => { d.open = true; });
+    } else {
+      document.querySelectorAll("details.panel").forEach(d => { d.open = false; });
+    }
+  }catch{}
+
   applyPreset(ui.preset.value);
   renderKeyboard();
   capture.updateUI();

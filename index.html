@@ -72,8 +72,8 @@
         </div>
       </div>
 
-      <div class="card" style="border-color:#eee;">
-        <div class="big">Pitch model</div>
+      <details class="card panel" data-panel="pitch">
+        <summary class="big">Pitch model</summary>
         <div class="row" style="margin-top:10px;">
           <label for="a4">A4 reference (Hz)</label>
           <input id="a4" type="range" min="432" max="446" step="0.1" value="440" />
@@ -112,12 +112,11 @@
         <div class="row" style="margin-top:10px;">
           <label for="shape">Curve shape</label>
           <input id="shape" type="range" min="0.7" max="2.7" step="0.01" value="1.6" />
-        </div>
-        <div class="mono">Shape: <span id="shapeV">1.60</span></div>
-      </div>
+  
+      </details>
 
-      <div class="card" style="border-color:#eee;">
-        <div class="big">Debug readout</div>
+      <details class="card panel" data-panel="debug">
+        <summary class="big">Debug readout</summary>
         <div class="mono" style="margin-top:10px;">
           <div>Selected: <span id="selNote">—</span></div>
           <div>ET Hz: <span id="dbgEt">—</span></div>
@@ -128,8 +127,8 @@
         </div>
         <div class="muted" style="margin-top:8px;">
           “Reality” = what the simulated piano is actually outputting (what your app hears).
-        </div>
-      </div>
+  
+      </details>      </div>
     </div>
 
     <div class="kbd" style="margin-top:12px;">
