@@ -143,10 +143,6 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   border:1px solid #bbb;
   background:#fff;
   border-radius: 0 0 6px 6px;
-
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
 }
 .white.active{ background:#e8f0ff; }
 
@@ -158,10 +154,6 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   background:#111;
   border-radius: 0 0 6px 6px;
   z-index: 5;
-
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
 }
 .black.active{ background:#334; }
 
@@ -216,13 +208,13 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 
   /* Bigger keys on phones (still scrollable) */
   :root{
-    --whiteW:22px;
-    --whiteH:140px;
-    --blackW:14px;
-    --blackH:90px;
-    --blackBottom:68px;
-    --keysHeight:155px;
-    --keysPad:6px;
+    --whiteW:44px;
+    --whiteH:230px;
+    --blackW:28px;
+    --blackH:150px;
+    --blackBottom:110px;
+    --keysHeight:245px;
+    --keysPad:8px;
   }
 
   .keylabel{ display:none; }
