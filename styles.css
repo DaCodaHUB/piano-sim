@@ -208,13 +208,13 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 
   /* Bigger keys on phones (still scrollable) */
   :root{
-    --whiteW:44px;
-    --whiteH:230px;
-    --blackW:28px;
-    --blackH:150px;
-    --blackBottom:110px;
-    --keysHeight:245px;
-    --keysPad:8px;
+    --whiteW:22px;
+    --whiteH:140px;
+    --blackW:14px;
+    --blackH:90px;
+    --blackBottom:68px;
+    --keysHeight:155px;
+    --keysPad:6px;
   }
 
   .keylabel{ display:none; }
