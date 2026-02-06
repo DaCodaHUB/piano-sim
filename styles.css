@@ -144,7 +144,7 @@ user-select:none;
   bottom:0;
   width: var(--whiteW);
   height: var(--whiteH);
-  border:1px solid #bbb;
+  border: 1px solid #cfcfcf;
   background:#fff;
   border-radius: 0 0 6px 6px;
 
@@ -254,16 +254,15 @@ user-select:none;
   width: 34px;
 }
 
-
-
-
 /* Phone landscape: double key size */
 @media (max-width: 920px) and (orientation: landscape){
   :root{
-    --whiteW: 48px;
-    --whiteH: 240px;
-    --blackW: 32px;
-    --blackH: 150px;
-    --blackBottom: 90px;
+    --whiteW: 34px;
+    --whiteH: 170px;
+
+    /* black keys scale from white key size */
+    --blackW: calc(var(--whiteW) * 0.65);
+    --blackH: calc(var(--whiteH) * 0.62);
+    --blackBottom: calc(var(--whiteH) * 0.45);
   }
 }
