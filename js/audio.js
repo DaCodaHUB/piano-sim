@@ -64,7 +64,7 @@ export class AudioEngine {
     gainNode.gain.cancelScheduledValues(t);
     gainNode.gain.setValueAtTime(gainNode.gain.value, t);
     gainNode.gain.setTargetAtTime(1.0, t, 0.008);
-    gainNode.gain.setTargetAtTime(0.55, t + 0.06, 0.10);
+    gainNode.gain.setTargetAtTime(0.75, t + 0.06, 0.10);
   }
 
   envelopeOff(gainNode, hard=false) {
