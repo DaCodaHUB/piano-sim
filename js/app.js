@@ -33,38 +33,43 @@ export function initApp() {
     selNote: document.getElementById('selNote'),
     dbgEt: document.getElementById('dbgEt'),
     dbgRealityC: document.getElementById('dbgRealityC'),
-    dbgRealityHz: document.getElementById('dbgRealityHz'),
-    dbgDetune: document.getElementById('dbgDetune'),
+    dbgTargetHz: document.getElementById('dbgTargetHz'),
     dbgOutHz: document.getElementById('dbgOutHz'),
-
-    keysEl: document.getElementById('keys'),
-
-    capPreset: document.getElementById('capPreset'),
-    capSeconds: document.getElementById('capSeconds'),
-    capSecondsV: document.getElementById('capSecondsV'),
-    capGap: document.getElementById('capGap'),
-    capGapV: document.getElementById('capGapV'),
-    capStart: document.getElementById('capStart'),
-    capNext: document.getElementById('capNext'),
-    capRepeat: document.getElementById('capRepeat'),
-    capStop: document.getElementById('capStop'),
-    capNow: document.getElementById('capNow'),
-    capProg: document.getElementById('capProg'),
-    capCustom: document.getElementById('capCustom'),
-    midiToName: midiToName,
-
-    tuneTarget: document.getElementById('tuneTarget'),
+    dbgCents: document.getElementById('dbgCents'),
     detune: document.getElementById('detune'),
     detuneV: document.getElementById('detuneV'),
-    btnRandomDetune: document.getElementById('btnRandomDetune'),
-    btnSnapToTarget: document.getElementById('btnSnapToTarget'),
+    btnExportCurve: document.getElementById('btnExportCurve'),
+    btnImportCurve: document.getElementById('btnImportCurve'),
+    fileImportCurve: document.getElementById('fileImportCurve'),
+    btnResetCurve: document.getElementById('btnResetCurve'),
 
-    curveJson: document.getElementById('curveJson'),
-    btnExportTruth: document.getElementById('btnExportTruth'),
-    btnApplyImport: document.getElementById('btnApplyImport'),
-    importStatus: document.getElementById('importStatus'),
+    // Capture
+    btnStartCapture: document.getElementById('btnStartCapture'),
+    btnStopCapture: document.getElementById('btnStopCapture'),
+    capStatus: document.getElementById('capStatus'),
+    capHz: document.getElementById('capHz'),
+    capCents: document.getElementById('capCents'),
+    capNote: document.getElementById('capNote'),
+    capHistory: document.getElementById('capHistory'),
+    capGraph: document.getElementById('capGraph'),
   };
 
+  // Tabs
+  function setTab(which) {
+    ui.tabPlay.classList.toggle('active', which === 'play');
+    ui.tabCapture.classList.toggle('active', which === 'capture');
+    ui.tabTune.classList.toggle('active', which === 'tune');
+
+    ui.panePlay.style.display = which === 'play' ? 'block' : 'none';
+    ui.paneCapture.style.display = which === 'capture' ? 'block' : 'none';
+    ui.paneTune.style.display = which === 'tune' ? 'block' : 'none';
+  }
+  ui.tabPlay.onclick = () => setTab('play');
+  ui.tabCapture.onclick = () => setTab('capture');
+  ui.tabTune.onclick = () => setTab('tune');
+  setTab('play');
+
+  // State
   let selectedMidi = A4_MIDI;
   let importedCurve = null;
   let importedA4 = null;
@@ -74,201 +79,120 @@ export function initApp() {
   const keyDivs = new Map();
 
   const audio = new AudioEngine(ui, () => ({ importedCurve, detuneMap, selectedMidi, sustainOn }));
+  let audioUnlocked = false; // require user gesture via Start Audio
 
-  function setTab(which) {
-    ui.tabPlay.classList.remove('active');
-    ui.tabCapture.classList.remove('active');
-    ui.tabTune.classList.remove('active');
-    ui.panePlay.style.display = 'none';
-    ui.paneCapture.style.display = 'none';
-    ui.paneTune.style.display = 'none';
-
-    if (which === 'play') { ui.tabPlay.classList.add('active'); ui.panePlay.style.display = 'block'; }
-    if (which === 'capture') { ui.tabCapture.classList.add('active'); ui.paneCapture.style.display = 'block'; }
-    if (which === 'tune') { ui.tabTune.classList.add('active'); ui.paneTune.style.display = 'block'; }
-  }
-  ui.tabPlay.onclick = () => setTab('play');
-  ui.tabCapture.onclick = () => setTab('capture');
-  ui.tabTune.onclick = () => setTab('tune');
-
-  const fmtHz = (x) => x.toFixed(3);
-  const fmtC = (x) => x.toFixed(1);
-
-  function updateDebug() {
-    ui.a4v.textContent = parseFloat(ui.a4.value).toFixed(1);
-    ui.lowExV.textContent = parseFloat(ui.lowEx.value).toFixed(1);
-    ui.highExV.textContent = parseFloat(ui.highEx.value).toFixed(1);
-    ui.shapeV.textContent = parseFloat(ui.shape.value).toFixed(2);
-
-    ui.selNote.textContent = `${midiToName(selectedMidi)} (MIDI ${selectedMidi})`;
-
-    const { et, realityC, realityHz, detuneC, outHz } = getOutputHz(ui, importedCurve, detuneMap, selectedMidi);
-    ui.dbgEt.textContent = fmtHz(et);
-    ui.dbgRealityC.textContent = fmtC(realityC);
-    ui.dbgRealityHz.textContent = fmtHz(realityHz);
-    ui.dbgDetune.textContent = fmtC(detuneC);
-    ui.dbgOutHz.textContent = fmtHz(outHz);
-  }
-
-  function scheduleUpdate() {
-    requestAnimationFrame(() => {
-      updateDebug();
-      audio.retuneAll();
-    });
-  }
-
-  function applyPreset(p) {
-    if (p === "mild") { ui.lowEx.value = "-10"; ui.highEx.value = "20"; ui.shape.value = "1.5"; }
-    if (p === "medium") { ui.lowEx.value = "-15"; ui.highEx.value = "35"; ui.shape.value = "1.6"; }
-    if (p === "strong") { ui.lowEx.value = "-25"; ui.highEx.value = "55"; ui.shape.value = "1.8"; }
-    scheduleUpdate();
-  }
-  ui.preset.onchange = () => applyPreset(ui.preset.value);
-
-  function attachKeyHandlers(div, midi) {
-    const down = async (e) => {
-      e.preventDefault();
-      selectedMidi = midi;
-      syncTuneSliderFromSelected();
-      updateDebug();
-
-      // Auto-enable audio on first interaction (makes mode-switching + reload feel reliable).
-      // - Synth modes need WebAudio ctx.
-      // - Sampled piano mode uses Tone.js (also requires a user gesture, which this is).
-      if (ui.wave.value !== "piano_samples" && !audio.ctx) {
-        try {
-          await audio.enable();
-          ui.btnStartAudio.disabled = true;
-          ui.btnStopAll.disabled = false;
-        } catch (err) {
-          console.warn("Audio enable failed", err);
-          return;
-        }
-      }
-
-      // For sampled piano, ensure Tone is started/loaded via the same gesture.
-      if (ui.wave.value === "piano_samples") {
-        try {
-          await audio.enable();
-          ui.btnStartAudio.disabled = true;
-          ui.btnStopAll.disabled = false;
-        } catch (err) {
-          console.warn("Sampler enable failed", err);
-          return;
-        }
-      }
-
-      audio.press(midi);
-      updateKeyHighlights();
-    };
-    const up = (e) => {
-      e.preventDefault();
-      audio.release(midi);
-      updateKeyHighlights();
-      updateDebug();
-    };
-    div.addEventListener('pointerdown', down);
-    div.addEventListener('pointerup', up);
-    div.addEventListener('pointerleave', up);
-    div.addEventListener('pointercancel', up);
-  }
-
-  function renderKeyboard() {
-    ui.keysEl.innerHTML = '';
-    keyDivs.clear();
-
-    const whiteWidth = 26;
-    let whiteIndex = 0;
-
-    for (let midi = MIDI_START; midi <= MIDI_END; midi++) {
-      if (isBlack(midi)) continue;
-      const d = document.createElement('div');
-      d.className = 'white';
-      d.style.left = (whiteIndex * whiteWidth) + 'px';
-
-      const lbl = document.createElement('div');
-      lbl.className = 'keylabel';
-      lbl.textContent = midiToName(midi);
-      d.appendChild(lbl);
-
-      attachKeyHandlers(d, midi);
-      ui.keysEl.appendChild(d);
-      keyDivs.set(midi, d);
-      whiteIndex++;
-    }
-
-    for (let midi = MIDI_START; midi <= MIDI_END; midi++) {
-      if (!isBlack(midi)) continue;
-      const d = document.createElement('div');
-      d.className = 'black';
-
-      const n = midi % 12;
-      let offset = 18;
-      if (n === 6) offset = 16;
-
-      let w = 0;
-      for (let m = MIDI_START; m <= midi; m++) if (!isBlack(m)) w++;
-      const left = (w - 1) * whiteWidth + offset;
-      d.style.left = left + 'px';
-
-      const lbl = document.createElement('div');
-      lbl.className = 'keylabel blackLbl';
-      lbl.textContent = midiToName(midi);
-      d.appendChild(lbl);
-
-      attachKeyHandlers(d, midi);
-      ui.keysEl.appendChild(d);
-      keyDivs.set(midi, d);
-    }
-
+  function setTabHighlight(midi) {
+    selectedMidi = midi;
+    syncTuneSliderFromSelected();
+    updateDebug();
     updateKeyHighlights();
   }
 
-  function updateKeyHighlights() {
-    for (const div of keyDivs.values()) div.classList.remove('active');
-    for (const midi of audio.activeNotes.keys()) {
-      const div = keyDivs.get(midi);
-      if (div) div.classList.add('active');
+  // Build keyboard UI
+  const keyboardEl = document.getElementById('keyboard');
+
+  function buildKeyboard() {
+    keyboardEl.innerHTML = '';
+    keyDivs.clear();
+
+    for (let midi = MIDI_START; midi <= MIDI_END; midi++) {
+      const name = midiToName(midi);
+      const div = document.createElement('div');
+      div.className = 'key ' + (isBlack(midi) ? 'black' : 'white');
+      div.dataset.midi = String(midi);
+
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = name;
+      div.appendChild(label);
+
+      // Pointer events
+      const down = (e) => {
+        e.preventDefault();
+        selectedMidi = midi;
+        syncTuneSliderFromSelected();
+        updateDebug();
+
+        // Require Start Audio before any sound plays.
+        if (!audioUnlocked) return;
+
+        audio.press(midi);
+        updateKeyHighlights();
+      };
+      const up = (e) => {
+        e.preventDefault();
+        audio.release(midi);
+        updateKeyHighlights();
+        updateDebug();
+      };
+      div.addEventListener('pointerdown', down);
+      div.addEventListener('pointerup', up);
+      div.addEventListener('pointerleave', up);
+      div.addEventListener('pointercancel', up);
+
+      // Click selects
+      div.addEventListener('click', () => setTabHighlight(midi));
+
+      keyboardEl.appendChild(div);
+      keyDivs.set(midi, div);
     }
   }
 
-  const qwertyMap = new Map([
-    ["A", 60], ["W", 61], ["S", 62], ["E", 63], ["D", 64], ["F", 65],
-    ["T", 66], ["G", 67], ["Y", 68], ["H", 69], ["U", 70], ["J", 71],
-  ]);
-  const keysDown = new Set();
-  window.addEventListener('keydown', (e) => {
-    const k = (e.key || '').toUpperCase();
-    if (!qwertyMap.has(k)) return;
-    if (keysDown.has(k)) return;
-    keysDown.add(k);
+  buildKeyboard();
 
-    selectedMidi = qwertyMap.get(k);
+  // Select note dropdown
+  function fillNoteSelect() {
+    ui.selNote.innerHTML = '';
+    for (let midi = MIDI_START; midi <= MIDI_END; midi++) {
+      const opt = document.createElement('option');
+      opt.value = String(midi);
+      opt.textContent = midiToName(midi);
+      if (midi === selectedMidi) opt.selected = true;
+      ui.selNote.appendChild(opt);
+    }
+  }
+  fillNoteSelect();
+  ui.selNote.onchange = () => {
+    setTabHighlight(parseInt(ui.selNote.value, 10));
+  };
+
+  // QWERTY map
+  const qwertyMap = new Map([
+    ['a', 60], ['w', 61], ['s', 62], ['e', 63], ['d', 64], ['f', 65], ['t', 66], ['g', 67], ['y', 68], ['h', 69], ['u', 70], ['j', 71], ['k', 72],
+    ['o', 73], ['l', 74], ['p', 75], [';', 76],
+  ]);
+  const held = new Set();
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (e.repeat) return;
+    if (!qwertyMap.has(k)) return;
+
+    const midi = qwertyMap.get(k);
+    held.add(midi);
+
+    selectedMidi = midi;
     syncTuneSliderFromSelected();
     updateDebug();
-    // Auto-enable synth audio for computer-keyboard play.
-    if (ui.wave.value !== "piano_samples" && !audio.ctx) {
-      audio.enable().then(() => {
-        ui.btnStartAudio.disabled = true;
-        ui.btnStopAll.disabled = false;
-        audio.press(selectedMidi);
-        updateKeyHighlights();
-      }).catch(err => console.warn("Audio enable failed", err));
-    } else {
-      audio.press(selectedMidi);
-      updateKeyHighlights();
-    }
+
+    // Require Start Audio before any sound plays.
+    if (!audioUnlocked) return;
+
+    audio.press(selectedMidi);
+    updateKeyHighlights();
   });
+
   window.addEventListener('keyup', (e) => {
-    const k = (e.key || '').toUpperCase();
+    const k = e.key.toLowerCase();
     if (!qwertyMap.has(k)) return;
-    keysDown.delete(k);
-    if (ui.wave.value === "piano_samples") {
-      audio.release(qwertyMap.get(k));
-      updateKeyHighlights();
-      updateDebug();
-    } else if (audio.ctx) {
-      audio.release(qwertyMap.get(k));
+
+    const midi = qwertyMap.get(k);
+    held.delete(midi);
+
+    if (sustainOn && ui.sustain.value === 'on') {
+      // sustain holds
+    } else {
+      audio.release(midi);
       updateKeyHighlights();
       updateDebug();
     }
@@ -277,6 +201,7 @@ export function initApp() {
   ui.btnStartAudio.onclick = () => {
     audio.enable()
       .then(() => {
+        audioUnlocked = true;
         ui.btnStartAudio.disabled = true;
         ui.btnStopAll.disabled = false;
         scheduleUpdate();
@@ -285,24 +210,19 @@ export function initApp() {
         console.warn('Audio enable failed:', e);
       });
   };
+
   ui.btnStopAll.onclick = () => { audio.stopAll(); updateKeyHighlights(); updateDebug(); };
 
   ui.vol.oninput = () => audio.setVolume(parseFloat(ui.vol.value));
   ui.sustain.onchange = () => { sustainOn = (ui.sustain.value === 'on'); };
   ui.poly.onchange = () => { audio.trimVoices(); };
+
   ui.wave.onchange = () => {
-    // Some browsers drop "user gesture" privileges across async/await.
-    // Call enable() synchronously and handle the promise.
-    audio.enable()
-      .then(() => {
-        ui.btnStartAudio.disabled = true;
-        ui.btnStopAll.disabled = false;
-      })
-      .catch((e) => {
-        // Leave Start Audio enabled so the user can retry.
-        console.warn('Audio enable failed on wave change:', e);
-        ui.btnStartAudio.disabled = false;
-      });
+    // Require the user to re-enable audio every time the sound changes.
+    audioUnlocked = false;
+    audio.disable();
+    ui.btnStartAudio.disabled = false;
+    ui.btnStopAll.disabled = true;
     scheduleUpdate();
   };
 
@@ -310,6 +230,7 @@ export function initApp() {
     const c = detuneMap.get(selectedMidi) ?? 0;
     ui.detune.value = c.toFixed(1);
     ui.detuneV.textContent = parseFloat(ui.detune.value).toFixed(1);
+    if (ui.selNote) ui.selNote.value = String(selectedMidi);
   }
 
   function setDetuneForSelected(cents) {
@@ -321,98 +242,130 @@ export function initApp() {
 
   ui.detune.oninput = () => {
     const c = parseFloat(ui.detune.value);
-    detuneMap.set(selectedMidi, c);
     ui.detuneV.textContent = c.toFixed(1);
+    setDetuneForSelected(c);
+  };
+
+  // Presets / tuning model
+  function updatePresetUI() {
+    ui.a4v.textContent = parseFloat(ui.a4.value).toFixed(0);
+    ui.lowExV.textContent = parseFloat(ui.lowEx.value).toFixed(0);
+    ui.highExV.textContent = parseFloat(ui.highEx.value).toFixed(0);
+    ui.shapeV.textContent = parseFloat(ui.shape.value).toFixed(0);
+  }
+
+  ui.a4.oninput = () => { updatePresetUI(); scheduleUpdate(); };
+  ui.lowEx.oninput = () => { updatePresetUI(); scheduleUpdate(); };
+  ui.highEx.oninput = () => { updatePresetUI(); scheduleUpdate(); };
+  ui.shape.oninput = () => { updatePresetUI(); scheduleUpdate(); };
+
+  ui.preset.onchange = () => {
+    if (ui.preset.value === 'default') {
+      ui.a4.value = '440';
+      ui.lowEx.value = '8';
+      ui.highEx.value = '4';
+      ui.shape.value = '45';
+      importedCurve = null;
+      importedA4 = null;
+      detuneMap.clear();
+      updatePresetUI();
+      scheduleUpdate();
+    }
+    if (ui.preset.value === 'imported' && !importedCurve) {
+      ui.preset.value = 'default';
+    }
     scheduleUpdate();
   };
 
-  document.querySelectorAll('.detStep').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const step = parseFloat(btn.dataset.step);
-      const cur = detuneMap.get(selectedMidi) ?? 0;
-      setDetuneForSelected(cur + step);
-    });
-  });
-
-  ui.btnRandomDetune.onclick = () => {
-    const r = (Math.random() * 70) - 35;
-    setDetuneForSelected(Math.round(r * 10) / 10);
+  ui.btnExportCurve.onclick = () => {
+    const a4 = importedA4 ?? parseFloat(ui.a4.value);
+    const curve = exportTruthCurve(a4, importedCurve, detuneMap);
+    const blob = new Blob([JSON.stringify(curve, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `piano-curve-A4-${Math.round(a4)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  ui.btnSnapToTarget.onclick = () => {
-    const { realityC } = getOutputHz(ui, importedCurve, detuneMap, selectedMidi);
-    const targetC = getTargetCents(ui, importedCurve, selectedMidi);
-    const neededDetune = (targetC - realityC);
-    setDetuneForSelected(Math.round(neededDetune * 10) / 10);
-  };
+  ui.btnImportCurve.onclick = () => ui.fileImportCurve.click();
 
-  ui.btnExportTruth.onclick = () => {
-    const payload = exportTruthCurve(ui, importedCurve);
-    ui.curveJson.value = JSON.stringify(payload, null, 2);
-    ui.importStatus.textContent = "Exported current reality curve to JSON box.";
-  };
-
-  ui.btnApplyImport.onclick = () => {
+  ui.fileImportCurve.onchange = async () => {
+    const f = ui.fileImportCurve.files?.[0];
+    if (!f) return;
+    const text = await f.text();
     try {
-      const obj = JSON.parse(ui.curveJson.value);
-      const curve = obj.curveCents88;
-      if (!Array.isArray(curve) || curve.length !== 88) {
-        ui.importStatus.textContent = "Import failed: curveCents88 must be an array of 88 numbers.";
-        return;
-      }
-      const cleaned = curve.map(x => typeof x === 'number' ? x : parseFloat(x));
-      if (cleaned.some(x => Number.isNaN(x))) {
-        ui.importStatus.textContent = "Import failed: curveCents88 contains non-numeric values.";
-        return;
-      }
-      importedCurve = cleaned;
-      importedA4 = typeof obj.a4Hz === 'number' ? obj.a4Hz : null;
-
-      if (importedA4) {
-        ui.a4.value = importedA4.toFixed(1);
-        ui.a4v.textContent = importedA4.toFixed(1);
-      }
-
-      ui.importStatus.textContent = "Import applied. Set “Piano reality” to 'ET + imported curve' or use 'Stretch' target to tune to it.";
+      const json = JSON.parse(text);
+      importedCurve = json;
+      importedA4 = json?.a4 ?? null;
+      ui.preset.value = 'imported';
       scheduleUpdate();
     } catch (e) {
-      ui.importStatus.textContent = "Import failed: invalid JSON.";
+      console.warn('Import failed:', e);
+    } finally {
+      ui.fileImportCurve.value = '';
     }
   };
 
-  const capture = new CaptureController(
-    ui, audio,
-    (m) => { selectedMidi = m; },
-    syncTuneSliderFromSelected,
-    updateDebug,
-    updateKeyHighlights
-  );
-
-  ui.capSeconds.oninput = () => capture.updateUI();
-  ui.capGap.oninput = () => capture.updateUI();
-  ui.capPreset.onchange = () => capture.updateUI();
-  ui.capCustom.oninput = () => capture.updateUI();
-
-  ui.capStart.onclick = () => {
-    if (!audio.ctx) { ui.capNow.textContent = "Enable Audio first"; return; }
-    capture.start();
+  ui.btnResetCurve.onclick = () => {
+    importedCurve = null;
+    importedA4 = null;
+    detuneMap.clear();
+    ui.preset.value = 'default';
+    scheduleUpdate();
   };
-  ui.capStop.onclick = () => capture.stop();
-  ui.capNext.onclick = () => capture.next();
-  ui.capRepeat.onclick = () => capture.repeat();
 
-  ['input','change'].forEach(ev => {
-    ui.a4.addEventListener(ev, scheduleUpdate);
-    ui.lowEx.addEventListener(ev, scheduleUpdate);
-    ui.highEx.addEventListener(ev, scheduleUpdate);
-    ui.shape.addEventListener(ev, scheduleUpdate);
-    ui.pianoReality.addEventListener(ev, scheduleUpdate);
-    ui.tuneTarget.addEventListener(ev, scheduleUpdate);
-  });
+  // Debug + highlighting + retune
+  function updateKeyHighlights() {
+    for (let midi = MIDI_START; midi <= MIDI_END; midi++) {
+      const div = keyDivs.get(midi);
+      if (!div) continue;
+      div.classList.toggle('selected', midi === selectedMidi);
+      div.classList.toggle('held', held.has(midi));
+    }
+  }
 
-  applyPreset(ui.preset.value);
-  renderKeyboard();
-  capture.updateUI();
+  function updateDebug() {
+    const a4 = importedA4 ?? parseFloat(ui.a4.value);
+    const targetCents = getTargetCents(a4, selectedMidi, importedCurve, detuneMap);
+    const outHz = getOutputHz(a4, selectedMidi, importedCurve, detuneMap);
+    const targetHz = 440 * Math.pow(2, (selectedMidi - A4_MIDI) / 12);
+
+    ui.dbgEt.textContent = `${midiToName(selectedMidi)} = ${targetHz.toFixed(3)} Hz`;
+    ui.dbgRealityC.textContent = `${targetCents.toFixed(2)} cents`;
+    ui.dbgTargetHz.textContent = `${targetHz.toFixed(3)} Hz`;
+    ui.dbgOutHz.textContent = `${outHz.toFixed(3)} Hz`;
+    ui.dbgCents.textContent = `${(1200 * Math.log2(outHz / targetHz)).toFixed(2)} cents`;
+  }
+
+  let raf = null;
+  function scheduleUpdate() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      audio.retuneAll();
+      updateDebug();
+      updateKeyHighlights();
+      updatePresetUI();
+    });
+  }
+
+  // Capture tab
+  const capture = new CaptureController(ui, () => ({
+    a4: importedA4 ?? parseFloat(ui.a4.value),
+    importedCurve,
+    detuneMap,
+    selectedMidi,
+  }));
+
+  ui.btnStartCapture.onclick = () => capture.start();
+  ui.btnStopCapture.onclick = () => capture.stop();
+
+  // Init visuals
+  updatePresetUI();
   syncTuneSliderFromSelected();
   updateDebug();
+  updateKeyHighlights();
+  scheduleUpdate();
 }
