@@ -143,6 +143,8 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   border:1px solid #bbb;
   background:#fff;
   border-radius: 0 0 6px 6px;
+  
+  touch-action: pan-x;
 }
 .white.active{ background:#e8f0ff; }
 
@@ -154,6 +156,8 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   background:#111;
   border-radius: 0 0 6px 6px;
   z-index: 5;
+
+  touch-action: pan-x;
 }
 .black.active{ background:#334; }
 
