@@ -40,6 +40,7 @@ export function initApp() {
     dbgOutHz: document.getElementById('dbgOutHz'),
 
     keysEl: document.getElementById('keys'),
+    kbdScroll: document.getElementById('kbdScroll'),
 
     capPreset: document.getElementById('capPreset'),
     capSeconds: document.getElementById('capSeconds'),
@@ -146,29 +147,52 @@ export function initApp() {
     return false;
   }
 
-  function attachKeyHandlers(div, midi) {
-    const down = (e) => {
-      e.preventDefault();
-      selectedMidi = midi;
-      syncTuneSliderFromSelected();
-      updateDebug();
+  // Drag-to-riff / gliss support on touch devices.
+// We track each active pointer and switch notes as the finger moves across keys.
+const pointerToMidi = new Map(); // pointerId -> midi
 
-      if (!requireAudioOrMessage()) return;
+function midiFromPoint(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return null;
+  const keyEl = el.closest?.('.white, .black');
+  if (!keyEl) return null;
+  const midi = Number(keyEl.dataset.midi);
+  return Number.isFinite(midi) ? midi : null;
+}
 
-      audio.press(midi);
-      updateKeyHighlights();
-    };
-    const up = (e) => {
-      e.preventDefault();
-      audio.release(midi);
-      updateKeyHighlights();
-      updateDebug();
-    };
-    div.addEventListener('pointerdown', down);
-    div.addEventListener('pointerup', up);
-    div.addEventListener('pointerleave', up);
-    div.addEventListener('pointercancel', up);
+function pressForPointer(pointerId, midi) {
+  const prev = pointerToMidi.get(pointerId);
+  if (prev === midi) return;
+
+  if (prev != null) {
+    audio.release(prev);
   }
+
+  if (midi != null) {
+    selectedMidi = midi;
+    syncTuneSliderFromSelected();
+    updateDebug();
+
+    if (!requireAudioOrMessage()) return;
+
+    audio.press(midi);
+    pointerToMidi.set(pointerId, midi);
+    updateKeyHighlights();
+  } else {
+    pointerToMidi.delete(pointerId);
+  }
+}
+
+function releasePointer(pointerId) {
+  const prev = pointerToMidi.get(pointerId);
+  if (prev != null) {
+    audio.release(prev);
+    pointerToMidi.delete(pointerId);
+    updateKeyHighlights();
+    updateDebug();
+  }
+}
+
 
   function renderKeyboard() {
     ui.keysEl.innerHTML = '';
@@ -191,7 +215,7 @@ export function initApp() {
       lbl.textContent = midiToName(midi);
       d.appendChild(lbl);
 
-      attachKeyHandlers(d, midi);
+      d.dataset.midi = String(midi);
       ui.keysEl.appendChild(d);
       keyDivs.set(midi, d);
       whiteIndex++;
@@ -216,13 +240,38 @@ export function initApp() {
       lbl.textContent = midiToName(midi);
       d.appendChild(lbl);
 
-      attachKeyHandlers(d, midi);
+      d.dataset.midi = String(midi);
       ui.keysEl.appendChild(d);
       keyDivs.set(midi, d);
     }
 
     updateKeyHighlights();
+    updateScrollBar();
   }
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function updateScrollBar() {
+  if (!ui.kbdScroll || !ui.keysEl) return;
+  const kbd = ui.keysEl.parentElement; // .kbd
+  const maxScroll = Math.max(0, ui.keysEl.scrollWidth - kbd.clientWidth);
+
+  ui.kbdScroll.max = String(maxScroll);
+  const cur = parseInt(ui.kbdScroll.value || "0", 10);
+  const next = clamp(cur, 0, maxScroll);
+  ui.kbdScroll.value = String(next);
+  kbd.scrollLeft = next;
+}
+
+if (ui.kbdScroll) {
+  ui.kbdScroll.addEventListener('input', () => {
+    const kbd = ui.keysEl.parentElement;
+    kbd.scrollLeft = parseInt(ui.kbdScroll.value, 10);
+  });
+  window.addEventListener('resize', () => updateScrollBar());
+}
+
+
 
   function updateKeyHighlights() {
     for (const div of keyDivs.values()) div.classList.remove('active');
@@ -231,6 +280,37 @@ export function initApp() {
       if (div) div.classList.add('active');
     }
   }
+
+function setupKeyboardPointerListeners() {
+  const target = ui.keysEl;
+  if (!target) return;
+
+  target.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    target.setPointerCapture?.(e.pointerId);
+    const midi = midiFromPoint(e.clientX, e.clientY);
+    pressForPointer(e.pointerId, midi);
+  });
+
+  target.addEventListener('pointermove', (e) => {
+    if (!pointerToMidi.has(e.pointerId)) return;
+    e.preventDefault();
+    const midi = midiFromPoint(e.clientX, e.clientY);
+    pressForPointer(e.pointerId, midi);
+  });
+
+  target.addEventListener('pointerup', (e) => {
+    e.preventDefault();
+    releasePointer(e.pointerId);
+  });
+
+  target.addEventListener('pointercancel', (e) => {
+    e.preventDefault();
+    releasePointer(e.pointerId);
+  });
+}
+
+
 
   const qwertyMap = new Map([
     ["A", 60], ["W", 61], ["S", 62], ["E", 63], ["D", 64], ["F", 65],
@@ -292,6 +372,7 @@ export function initApp() {
     // Your request: when changing sound, hard-disable audio so the user can re-enable cleanly.
     // This prevents glitchy sampler/synth transitions and ensures a fresh graph.
     keysDown.clear();
+    pointerToMidi.clear();
     try {
       await audio.disable();
     } catch (e) {
@@ -425,6 +506,7 @@ export function initApp() {
   }catch{}
 
   applyPreset(ui.preset.value);
+  setupKeyboardPointerListeners();
   renderKeyboard();
   capture.updateUI();
   syncTuneSliderFromSelected();
