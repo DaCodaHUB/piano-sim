@@ -131,7 +131,8 @@ export function initApp() {
       selectedMidi = midi;
       syncTuneSliderFromSelected();
       updateDebug();
-      if (!audio.ctx) return;
+      // For synth modes we need the WebAudio context; for sampled piano we can play via Tone.js.
+      if (ui.wave.value !== "piano_samples" && !audio.ctx) return;
       audio.press(midi);
       updateKeyHighlights();
     };
