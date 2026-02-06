@@ -75,6 +75,33 @@ export function initApp() {
 
   const audio = new AudioEngine(ui, () => ({ importedCurve, detuneMap, selectedMidi, sustainOn }));
 
+  let mediaUnlocked = false;
+
+  async function unlockMediaOnIOS() {
+    if (mediaUnlocked) return;
+
+    // iOS Chrome = WebKit, so treat as iOS Safari
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (!isIOS) { mediaUnlocked = true; return; }
+
+    const el = document.getElementById("iosMediaUnlock");
+    if (el) {
+      try {
+        el.muted = true;
+        el.volume = 0;
+        // Play/pause "media" to nudge routing category
+        const p = el.play();
+        if (p && typeof p.catch === "function") await p;
+        el.pause();
+        el.currentTime = 0;
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    mediaUnlocked = true;
+  }
+
   function setTab(which) {
     ui.tabPlay.classList.remove('active');
     ui.tabCapture.classList.remove('active');
@@ -126,8 +153,9 @@ export function initApp() {
   ui.preset.onchange = () => applyPreset(ui.preset.value);
 
   function attachKeyHandlers(div, midi) {
-    const down = (e) => {
+    const down = async (e) => {
       e.preventDefault();
+      await unlockMediaOnIOS();
       selectedMidi = midi;
       syncTuneSliderFromSelected();
       updateDebug();
@@ -237,6 +265,7 @@ export function initApp() {
   });
 
   ui.btnStartAudio.onclick = async () => {
+    await unlockMediaOnIOS();
     await audio.enable();
     ui.btnStartAudio.disabled = true;
     ui.btnStopAll.disabled = false;
