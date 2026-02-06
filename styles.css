@@ -143,10 +143,6 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   border:1px solid #bbb;
   background:#fff;
   border-radius: 0 0 6px 6px;
-  
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
 }
 .white.active{ background:#e8f0ff; }
 
@@ -158,10 +154,6 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   background:#111;
   border-radius: 0 0 6px 6px;
   z-index: 5;
-
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
 }
 .black.active{ background:#334; }
 
