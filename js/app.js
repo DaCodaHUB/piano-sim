@@ -14,6 +14,8 @@ export function initApp() {
 
     btnStartAudio: document.getElementById('btnStartAudio'),
     btnStopAll: document.getElementById('btnStopAll'),
+    audioStatus: document.getElementById('audioStatus'),
+
     wave: document.getElementById('wave'),
     poly: document.getElementById('poly'),
     vol: document.getElementById('vol'),
@@ -75,6 +77,14 @@ export function initApp() {
 
   const audio = new AudioEngine(ui, () => ({ importedCurve, detuneMap, selectedMidi, sustainOn }));
 
+  function setAudioUiEnabled(enabled, msg) {
+    ui.btnStartAudio.disabled = enabled;
+    ui.btnStopAll.disabled = !enabled;
+    if (ui.audioStatus) ui.audioStatus.textContent = msg || (enabled ? 'Audio enabled.' : 'Audio is disabled. Click “Enable Audio”.');
+  }
+
+  setAudioUiEnabled(false);
+
   function setTab(which) {
     ui.tabPlay.classList.remove('active');
     ui.tabCapture.classList.remove('active');
@@ -125,38 +135,20 @@ export function initApp() {
   }
   ui.preset.onchange = () => applyPreset(ui.preset.value);
 
+  function requireAudioOrMessage() {
+    if (audio.isEnabled()) return true;
+    setAudioUiEnabled(false, 'Audio is disabled. Click “Enable Audio”.');
+    return false;
+  }
+
   function attachKeyHandlers(div, midi) {
-    const down = async (e) => {
+    const down = (e) => {
       e.preventDefault();
       selectedMidi = midi;
       syncTuneSliderFromSelected();
       updateDebug();
 
-      // Auto-enable audio on first interaction (makes mode-switching + reload feel reliable).
-      // - Synth modes need WebAudio ctx.
-      // - Sampled piano mode uses Tone.js (also requires a user gesture, which this is).
-      if (ui.wave.value !== "piano_samples" && !audio.ctx) {
-        try {
-          await audio.enable();
-          ui.btnStartAudio.disabled = true;
-          ui.btnStopAll.disabled = false;
-        } catch (err) {
-          console.warn("Audio enable failed", err);
-          return;
-        }
-      }
-
-      // For sampled piano, ensure Tone is started/loaded via the same gesture.
-      if (ui.wave.value === "piano_samples") {
-        try {
-          await audio.enable();
-          ui.btnStartAudio.disabled = true;
-          ui.btnStopAll.disabled = false;
-        } catch (err) {
-          console.warn("Sampler enable failed", err);
-          return;
-        }
-      }
+      if (!requireAudioOrMessage()) return;
 
       audio.press(midi);
       updateKeyHighlights();
@@ -237,72 +229,68 @@ export function initApp() {
     ["T", 66], ["G", 67], ["Y", 68], ["H", 69], ["U", 70], ["J", 71],
   ]);
   const keysDown = new Set();
+
   window.addEventListener('keydown', (e) => {
     const k = (e.key || '').toUpperCase();
     if (!qwertyMap.has(k)) return;
     if (keysDown.has(k)) return;
+
+    if (!requireAudioOrMessage()) return;
+
     keysDown.add(k);
 
     selectedMidi = qwertyMap.get(k);
     syncTuneSliderFromSelected();
     updateDebug();
-    // Auto-enable synth audio for computer-keyboard play.
-    if (ui.wave.value !== "piano_samples" && !audio.ctx) {
-      audio.enable().then(() => {
-        ui.btnStartAudio.disabled = true;
-        ui.btnStopAll.disabled = false;
-        audio.press(selectedMidi);
-        updateKeyHighlights();
-      }).catch(err => console.warn("Audio enable failed", err));
-    } else {
-      audio.press(selectedMidi);
-      updateKeyHighlights();
-    }
+
+    audio.press(selectedMidi);
+    updateKeyHighlights();
   });
+
   window.addEventListener('keyup', (e) => {
     const k = (e.key || '').toUpperCase();
     if (!qwertyMap.has(k)) return;
     keysDown.delete(k);
-    if (ui.wave.value === "piano_samples") {
-      audio.release(qwertyMap.get(k));
-      updateKeyHighlights();
-      updateDebug();
-    } else if (audio.ctx) {
-      audio.release(qwertyMap.get(k));
-      updateKeyHighlights();
-      updateDebug();
-    }
+
+    audio.release(qwertyMap.get(k));
+    updateKeyHighlights();
+    updateDebug();
   });
 
   ui.btnStartAudio.onclick = () => {
+    ui.btnStartAudio.disabled = true;
+    if (ui.audioStatus) ui.audioStatus.textContent = 'Enabling audio…';
+
     audio.enable()
       .then(() => {
-        ui.btnStartAudio.disabled = true;
-        ui.btnStopAll.disabled = false;
+        setAudioUiEnabled(true, ui.wave.value === 'piano_samples'
+          ? 'Audio enabled (piano samples).'
+          : 'Audio enabled (synth).');
         scheduleUpdate();
       })
       .catch((e) => {
         console.warn('Audio enable failed:', e);
+        setAudioUiEnabled(false, 'Audio enable failed. Click “Enable Audio” to retry.');
       });
   };
+
   ui.btnStopAll.onclick = () => { audio.stopAll(); updateKeyHighlights(); updateDebug(); };
 
   ui.vol.oninput = () => audio.setVolume(parseFloat(ui.vol.value));
   ui.sustain.onchange = () => { sustainOn = (ui.sustain.value === 'on'); };
   ui.poly.onchange = () => { audio.trimVoices(); };
-  ui.wave.onchange = () => {
-    // Some browsers drop "user gesture" privileges across async/await.
-    // Call enable() synchronously and handle the promise.
-    audio.enable()
-      .then(() => {
-        ui.btnStartAudio.disabled = true;
-        ui.btnStopAll.disabled = false;
-      })
-      .catch((e) => {
-        // Leave Start Audio enabled so the user can retry.
-        console.warn('Audio enable failed on wave change:', e);
-        ui.btnStartAudio.disabled = false;
-      });
+
+  ui.wave.onchange = async () => {
+    // Your request: when changing sound, hard-disable audio so the user can re-enable cleanly.
+    // This prevents glitchy sampler/synth transitions and ensures a fresh graph.
+    keysDown.clear();
+    try {
+      await audio.disable();
+    } catch (e) {
+      console.warn('Audio disable failed on wave change:', e);
+    }
+    updateKeyHighlights();
+    setAudioUiEnabled(false, 'Sound changed. Click “Enable Audio” to continue.');
     scheduleUpdate();
   };
 
@@ -394,7 +382,15 @@ export function initApp() {
   ui.capCustom.oninput = () => capture.updateUI();
 
   ui.capStart.onclick = () => {
-    if (!audio.ctx) { ui.capNow.textContent = "Enable Audio first"; return; }
+    // Capture is for tuner testing; disallow sampled piano mode.
+    if (ui.wave.value === 'piano_samples') {
+      ui.capNow.textContent = "Switch Waveform to a synth (e.g., sine/piano-ish) for Capture.";
+      return;
+    }
+    if (!audio.isEnabled() || !audio.ctx) {
+      ui.capNow.textContent = "Enable Audio first.";
+      return;
+    }
     capture.start();
   };
   ui.capStop.onclick = () => capture.stop();

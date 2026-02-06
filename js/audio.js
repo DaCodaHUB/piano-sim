@@ -39,9 +39,15 @@ export class AudioEngine {
   constructor(ui, getState) {
     this.ui = ui;
     this.getState = getState;
+
+    // WebAudio (synth)
     this.ctx = null;
     this.master = null;
+
+    // Currently-held notes (both synth + sampler)
     this.activeNotes = new Map(); // midi -> voice
+
+    // Synth voice pool
     this.voicePool = [];
 
     // Tone.js sampled piano
@@ -49,15 +55,62 @@ export class AudioEngine {
     this.samplerReady = false;
     this._samplerReadyPromise = null;
     this._samplerChain = null;
+
+    // True when user has explicitly enabled audio for the *current* sound mode.
+    this.enabled = false;
+  }
+
+  isEnabled() {
+    return this.enabled;
   }
 
   async enable() {
-    // Enable whichever engine is currently selected.
+    // Explicit user action enables whichever engine is currently selected.
     if (this.ui.wave.value === 'piano_samples') {
       await this.ensureSampledPiano();
+      this.enabled = true;
       return;
     }
     await this.ensureSynth();
+    this.enabled = true;
+  }
+
+  async disable() {
+    // Called when switching sound modes to avoid glitches (old graph still connected, tails, etc.)
+    this.stopAll();
+    this.enabled = false;
+
+    // Tear down Tone sampler chain (piano samples)
+    try {
+      if (this.sampler) {
+        try { this.sampler.releaseAll?.(); } catch {}
+        try { this.sampler.disconnect?.(); } catch {}
+        try { this.sampler.dispose?.(); } catch {}
+      }
+    } catch {}
+    this.sampler = null;
+    this.samplerReady = false;
+    this._samplerReadyPromise = null;
+
+    try {
+      if (this._samplerChain) {
+        const { comp, rev } = this._samplerChain;
+        try { comp?.disconnect?.(); } catch {}
+        try { comp?.dispose?.(); } catch {}
+        try { rev?.disconnect?.(); } catch {}
+        try { rev?.dispose?.(); } catch {}
+      }
+    } catch {}
+    this._samplerChain = null;
+
+    // Tear down WebAudio ctx (synth)
+    if (this.ctx) {
+      try { await this.ctx.suspend(); } catch {}
+      try { await this.ctx.close(); } catch {}
+    }
+    this.ctx = null;
+    this.master = null;
+    this.voicePool = [];
   }
 
   async ensureSynth() {
@@ -110,7 +163,6 @@ export class AudioEngine {
       this._samplerChain = { comp, rev };
 
       // If onload didn't fire (rare), mark ready once Tone reports loaded.
-      // Tone.Sampler has a `loaded` boolean in many versions.
       const start = performance.now();
       while (!this.samplerReady) {
         if (sampler.loaded) { this.samplerReady = true; break; }
@@ -199,6 +251,10 @@ export class AudioEngine {
 
   press(midi) {
     const mode = this.ui.wave.value;
+
+    // Require explicit enable (prevents glitchy mode switching + user-gesture headaches).
+    if (!this.enabled) return;
+
     if (mode === 'piano_samples') {
       this.pressSampled(midi);
       return;
@@ -258,7 +314,6 @@ export class AudioEngine {
     if (!v || !this.sampler) return;
     const { sustainOn } = this.getState();
     if (sustainOn && !hard) {
-      // Let Tone's release tail handle it.
       try { this.sampler.triggerRelease(v.note); } catch {}
       this.activeNotes.delete(midi);
       return;
