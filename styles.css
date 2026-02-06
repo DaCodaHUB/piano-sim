@@ -1,32 +1,201 @@
-:root { --border:#ddd; --bg:#fff; --muted:#666; }
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; line-height: 1.35; background: #fafafa; }
-h1 { margin:0 0 10px 0; font-size: 20px; }
-.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 12px; }
-.card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
-.row { display: grid; grid-template-columns: 1fr 220px; gap: 10px; align-items: center; margin-top: 10px; }
-.row:first-child { margin-top: 0; }
-label { font-weight: 650; }
-input[type="range"], select, textarea { width: 100%; }
-textarea { min-height: 90px; font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size: 12px; }
-button { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-button.primary { background: #111; color: #fff; border-color: #111; }
-button:disabled { opacity: .5; cursor: not-allowed; }
-.btns { display: flex; gap: 8px; flex-wrap: wrap; }
-.mono { font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-.muted { color: var(--muted); }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-.tabs { display:flex; gap:8px; flex-wrap:wrap; }
-.tab { padding: 8px 10px; border-radius: 10px; border: 1px solid #ccc; background:#fff; }
-.tab.active { background:#111; color:#fff; border-color:#111; }
-.kbd { border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; background: #fdfdfd; padding: 10px; }
-.keys { position: relative; height: 180px; min-width: 1320px; user-select:none; }
-.white { position:absolute; bottom:0; width: 26px; height: 170px; border:1px solid #bbb; background:#fff; border-radius: 0 0 6px 6px; box-sizing:border-box; }
-.white.active { background:#e8f0ff; }
-.black { position:absolute; bottom:78px; width: 16px; height: 100px; background:#111; border-radius: 0 0 6px 6px; z-index: 5; }
-.black.active { background:#334; }
-.keylabel { position:absolute; bottom:6px; left:4px; font-size: 10px; color:#333; }
-.keylabel.blackLbl { bottom:8px; left:2px; color:#fff; font-size: 9px; }
-.big { font-size: 18px; font-weight: 750; }
-.pill { display:inline-block; padding: 3px 8px; border-radius: 999px; border:1px solid var(--border); background:#fff; font-size: 12px; }
-@media (max-width: 860px) { .two,.three { grid-template-columns: 1fr; } .row { grid-template-columns: 1fr; } }
+:root{
+  --border:#ddd;
+  --bg:#fff;
+  --muted:#666;
+
+  /* Keyboard sizing (desktop defaults) */
+  --whiteW:26px;
+  --whiteH:170px;
+  --blackW:16px;
+  --blackH:100px;
+  --blackBottom:78px; /* how far black keys sit above the bottom */
+  --keysPad:10px;
+  --keysHeight:180px;
+
+  /* 52 white keys from A0–C8 */
+  --whiteKeyCount:52;
+}
+
+*{ box-sizing:border-box; }
+
+html,body{ height:100%; }
+
+body{
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  margin: 16px;
+  line-height: 1.35;
+  background: #fafafa;
+  color:#111;
+  /* helps reduce tap delay / accidental zoom */
+  touch-action: manipulation;
+}
+
+h1{ margin:0 0 10px 0; font-size: 20px; }
+
+.wrap{
+  max-width: 1040px;
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+
+.card{
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.row{
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+.row:first-child{ margin-top:0; }
+
+label{ font-weight: 650; }
+
+input[type="range"], select, textarea{ width:100%; }
+
+textarea{
+  min-height: 90px;
+  font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+
+/* Make form controls more thumb-friendly */
+select, button, input[type="range"]{ min-height: 40px; }
+
+button{
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+button.primary{ background:#111; color:#fff; border-color:#111; }
+button:disabled{ opacity:.5; cursor:not-allowed; }
+
+.btns{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.mono{ font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.muted{ color: var(--muted); }
+
+.two{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.three{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+.tabs{ display:flex; gap:8px; flex-wrap:wrap; }
+.tab{
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  background:#fff;
+}
+.tab.active{ background:#111; color:#fff; border-color:#111; }
+
+/* Keyboard container */
+.kbd{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow-x: auto;
+  background: #fdfdfd;
+  padding: var(--keysPad);
+  -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+}
+
+.keys{
+  position: relative;
+  height: var(--keysHeight);
+  min-width: calc(var(--whiteW) * var(--whiteKeyCount));
+  user-select:none;
+  touch-action: manipulation;
+}
+
+.white{
+  position:absolute;
+  bottom:0;
+  width: var(--whiteW);
+  height: var(--whiteH);
+  border:1px solid #bbb;
+  background:#fff;
+  border-radius: 0 0 6px 6px;
+}
+.white.active{ background:#e8f0ff; }
+
+.black{
+  position:absolute;
+  bottom: var(--blackBottom);
+  width: var(--blackW);
+  height: var(--blackH);
+  background:#111;
+  border-radius: 0 0 6px 6px;
+  z-index: 5;
+}
+.black.active{ background:#334; }
+
+.keylabel{
+  position:absolute;
+  bottom:6px;
+  left:4px;
+  font-size: 10px;
+  color:#333;
+  pointer-events:none;
+}
+.keylabel.blackLbl{
+  bottom:8px;
+  left:2px;
+  color:#fff;
+  font-size: 9px;
+}
+
+.big{ font-size: 18px; font-weight: 750; }
+.pill{
+  display:inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-size: 12px;
+}
+
+/* Existing breakpoint */
+@media (max-width: 860px){
+  .two,.three{ grid-template-columns: 1fr; }
+  .row{ grid-template-columns: 1fr; }
+}
+
+/* Phone-specific polish */
+@media (max-width: 520px){
+  body{ margin: 10px; }
+  h1{ font-size: 18px; }
+
+  /* Prevent iOS from zooming inputs by keeping font-size >= 16px */
+  select, textarea, button, input{ font-size: 16px; }
+
+  .card{ padding: 12px; }
+
+  /* Tabs look better as equal-width buttons */
+  .tabs{ gap:10px; }
+  .tab{ flex: 1 1 0; text-align:center; }
+
+  /* Make primary actions easy to tap */
+  .btns{ width:100%; }
+  .btns > button{ flex: 1 1 140px; }
+
+  /* Bigger keys on phones (still scrollable) */
+  :root{
+    --whiteW:32px;
+    --whiteH:200px;
+    --blackW:20px;
+    --blackH:120px;
+    --blackBottom:95px;
+    --keysHeight:210px;
+    --keysPad:8px;
+  }
+
+  .keylabel{ font-size: 11px; }
+  .keylabel.blackLbl{ font-size: 10px; }
+}

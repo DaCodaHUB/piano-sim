@@ -169,7 +169,10 @@ export function initApp() {
     ui.keysEl.innerHTML = '';
     keyDivs.clear();
 
-    const whiteWidth = 26;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const whiteWidth = parseFloat(rootStyle.getPropertyValue('--whiteW')) || 26;
+    // Keep black-key offsets proportional to the white key width.
+    const offsetScale = whiteWidth / 26;
     let whiteIndex = 0;
 
     for (let midi = MIDI_START; midi <= MIDI_END; midi++) {
@@ -195,8 +198,8 @@ export function initApp() {
       d.className = 'black';
 
       const n = midi % 12;
-      let offset = 18;
-      if (n === 6) offset = 16;
+      let offset = 18 * offsetScale;
+      if (n === 6) offset = 16 * offsetScale;
 
       let w = 0;
       for (let m = MIDI_START; m <= midi; m++) if (!isBlack(m)) w++;
