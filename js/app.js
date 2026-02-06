@@ -265,10 +265,14 @@ function updateScrollBar() {
 
 if (ui.kbdScroll) {
   ui.kbdScroll.addEventListener('input', () => {
-    const kbd = ui.keysEl.parentElement;
-    kbd.scrollLeft = parseInt(ui.kbdScroll.value, 10);
-  });
-  window.addEventListener('resize', () => updateScrollBar());
+  const kbd = ui.keysEl.closest('.kbd');
+  if (!kbd) return;
+  // max in UI may be >=1 even if actual maxScroll is 0; clamp by kbd scrollWidth
+  const maxScroll = Math.max(0, Math.round((ui.keysEl.scrollWidth || 0) - kbd.clientWidth));
+  const v = parseInt(ui.kbdScroll.value || "0", 10);
+  kbd.scrollLeft = Math.max(0, Math.min(v, maxScroll));
+});
+window.addEventListener('resize', () => updateScrollBar());
 }
 
 
