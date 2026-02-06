@@ -234,20 +234,33 @@ export class AudioEngine {
   setVoiceHz(voice, hz) {
     const t = this.ctx.currentTime;
     const mode = this.ui.wave.value;
+
+    // Only keep the two tuner-test synth modes:
+    // - sine: clean reference
+    // - pianoish: deterministic harmonic-rich tone for bass partial tracking
     if (mode === 'pianoish') {
+      voice.o1.type = 'sine'; voice.o2.type = 'sine'; voice.o3.type = 'sine';
+      voice.g1.gain.value = 1.00;
+      voice.g2.gain.value = 0.30;
+      voice.g3.gain.value = 0.12;
+
       voice.o1.frequency.setTargetAtTime(hz, t, 0.01);
       voice.o2.frequency.setTargetAtTime(hz * 2, t, 0.01);
       voice.o3.frequency.setTargetAtTime(hz * 3, t, 0.01);
-      voice.o1.type = 'sine'; voice.o2.type = 'sine'; voice.o3.type = 'sine';
-      voice.g1.gain.value = 1.00; voice.g2.gain.value = 0.30; voice.g3.gain.value = 0.12;
-    } else {
-      voice.o1.type = mode; voice.o2.type = mode; voice.o3.type = mode;
-      voice.g1.gain.value = 1.0; voice.g2.gain.value = 0.0; voice.g3.gain.value = 0.0;
-      voice.o1.frequency.setTargetAtTime(hz, t, 0.01);
-      voice.o2.frequency.setTargetAtTime(hz, t, 0.01);
-      voice.o3.frequency.setTargetAtTime(hz, t, 0.01);
+      return;
     }
+
+    // Default: sine reference
+    voice.o1.type = 'sine'; voice.o2.type = 'sine'; voice.o3.type = 'sine';
+    voice.g1.gain.value = 1.0;
+    voice.g2.gain.value = 0.0;
+    voice.g3.gain.value = 0.0;
+
+    voice.o1.frequency.setTargetAtTime(hz, t, 0.01);
+    voice.o2.frequency.setTargetAtTime(hz, t, 0.01);
+    voice.o3.frequency.setTargetAtTime(hz, t, 0.01);
   }
+
 
   press(midi) {
     const mode = this.ui.wave.value;

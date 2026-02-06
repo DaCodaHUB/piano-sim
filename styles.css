@@ -125,6 +125,7 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   background: #fdfdfd;
   padding: var(--keysPad);
   -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+  touch-action: pan-x;
 }
 
 .keys{
@@ -132,7 +133,7 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   height: var(--keysHeight);
   min-width: calc(var(--whiteW) * var(--whiteKeyCount));
   user-select:none;
-  touch-action: manipulation;
+  touch-action: pan-x;
 }
 
 .white{
@@ -143,8 +144,10 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   border:1px solid #bbb;
   background:#fff;
   border-radius: 0 0 6px 6px;
-  
+
   touch-action: pan-x;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .white.active{ background:#e8f0ff; }
 
@@ -158,6 +161,8 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   z-index: 5;
 
   touch-action: pan-x;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .black.active{ background:#334; }
 
@@ -193,50 +198,34 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 }
 
 /* Phone-specific polish */
-@media (max-width: 520px) {
+@media (max-width: 520px){
+  body{ margin: 10px; }
+  h1{ font-size: 18px; }
 
-  :root {
-    /* smaller keys, but not tiny */
-    --whiteW: 24px;
-    --whiteH: 140px;
-    --blackW: 16px;
-    --blackH: 88px;
+  /* Prevent iOS from zooming inputs by keeping font-size >= 16px */
+  select, textarea, button, input{ font-size: 16px; }
+
+  .card{ padding: 12px; }
+
+  /* Tabs look better as equal-width buttons */
+  .tabs{ gap:10px; }
+  .tab{ flex: 1 1 0; text-align:center; }
+
+  /* Make primary actions easy to tap */
+  .btns{ width:100%; }
+  .btns > button{ flex: 1 1 140px; }
+
+  /* Bigger keys on phones (still scrollable) */
+  :root{
+    --whiteW:22px;
+    --whiteH:140px;
+    --blackW:14px;
+    --blackH:90px;
+    --blackBottom:68px;
+    --keysHeight:155px;
+    --keysPad:6px;
   }
 
-  .three {
-    grid-template-columns: 1fr;
-  }
-
-  .two {
-    grid-template-columns: 1fr;
-  }
-
-  .tabs {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .tab {
-    width: 100%;
-    font-size: 16px;
-    padding: 12px;
-  }
-
-  /* keyboard container */
-  .kbd {
-    padding-bottom: 6px;
-  }
-
-  .keys {
-    min-height: var(--whiteH);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
-  }
-
-  /* make keys easier to tap */
-  .white,
-  .black {
-    touch-action: none;
-  }
+  .keylabel{ display:none; }
 }
+
