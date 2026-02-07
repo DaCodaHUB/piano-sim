@@ -224,8 +224,18 @@ export function initApp() {
     ui.kbdScroll.step = "1";
     ui.kbdScroll.value = ui.kbdScroll.value || "0";
     ui.kbdScroll.addEventListener('input', applyKeyboardPanFromSlider);
-    window.addEventListener('resize', updateKeyboardPanMetrics);
-    window.addEventListener('orientationchange', () => setTimeout(updateKeyboardPanMetrics, 80));
+    function relayoutKeyboardSoon() {
+    // wait for CSS media query to apply, then rebuild positions
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        renderKeyboard();           // ✅ rebuild key positions with new --whiteW
+        updateKeyboardPanMetrics(); // ✅ recompute slider pan metrics
+      });
+    });
+  }
+
+  window.addEventListener('resize', relayoutKeyboardSoon);
+  window.addEventListener('orientationchange', relayoutKeyboardSoon);
   }
 
   // ---------- Keyboard: riff/gliss ----------
