@@ -228,8 +228,8 @@ export function initApp() {
     // wait for CSS media query to apply, then rebuild positions
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        renderKeyboard();           // ✅ rebuild key positions with new --whiteW
-        updateKeyboardPanMetrics(); // ✅ recompute slider pan metrics
+        renderKeyboard();
+        updateKeyboardPanMetrics();
       });
     });
   }
