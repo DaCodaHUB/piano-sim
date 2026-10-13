@@ -79,6 +79,7 @@ export function initApp() {
 
   // Per-pointer riff state (multi-touch)
   const pointerToMidi = new Map(); // pointerId -> midi currently held
+  const heldPointers = new Set();
 
   // ---------- Audio ----------
   const audio = new AudioEngine(ui, () => ({
@@ -89,7 +90,7 @@ export function initApp() {
   }));
 
   function setAudioUiEnabled(enabled, msg) {
-    ui.btnStartAudio.disabled = enabled;
+    ui.btnStartAudio.disabled = false;
     ui.btnStopAll.disabled = !enabled;
     if (ui.audioStatus) {
       ui.audioStatus.textContent =
@@ -283,13 +284,21 @@ export function initApp() {
 
   function attachKeyHandlers(div) {
     div.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
+      heldPointers.add(e.pointerId);
       div.setPointerCapture?.(e.pointerId);
       const midi = midiFromPoint(e.clientX, e.clientY);
       pressForPointer(e.pointerId, midi);
     });
 
     div.addEventListener('pointermove', (e) => {
+      if (!heldPointers.has(e.pointerId)) return;
+      if (e.buttons === 0) {
+        heldPointers.delete(e.pointerId);
+        releasePointer(e.pointerId);
+        return;
+      }
       e.preventDefault();
       const midi = midiFromPoint(e.clientX, e.clientY);
       pressForPointer(e.pointerId, midi);
@@ -297,19 +306,34 @@ export function initApp() {
 
     div.addEventListener('pointerup', (e) => {
       e.preventDefault();
+      heldPointers.delete(e.pointerId);
       releasePointer(e.pointerId);
     });
 
     div.addEventListener('pointercancel', (e) => {
       e.preventDefault();
+      heldPointers.delete(e.pointerId);
       releasePointer(e.pointerId);
     });
 
     // Safety: if capture is lost, release
     div.addEventListener('lostpointercapture', (e) => {
+      heldPointers.delete(e.pointerId);
       releasePointer(e.pointerId);
     });
   }
+
+  window.addEventListener('pointerup', (e) => {
+    heldPointers.delete(e.pointerId);
+    releasePointer(e.pointerId);
+  });
+  window.addEventListener('blur', () => {
+    heldPointers.clear();
+    keysDown.clear();
+    for (const pid of Array.from(pointerToMidi.keys())) releasePointer(pid);
+    audio.stopAll();
+    updateKeyHighlights();
+  });
 
   // ---------- Render keyboard ----------
   function renderKeyboard() {
@@ -435,6 +459,7 @@ export function initApp() {
   };
 
   ui.btnStopAll.onclick = () => {
+    heldPointers.clear();
     // Release riff pointers too
     for (const pid of Array.from(pointerToMidi.keys())) releasePointer(pid);
     audio.stopAll();
@@ -448,6 +473,7 @@ export function initApp() {
 
   // When switching mode, hard disable audio to avoid glitches.
   ui.wave.onchange = async () => {
+    heldPointers.clear();
     keysDown.clear();
 
     // Release any active riff pointers

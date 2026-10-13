@@ -288,9 +288,9 @@ export class AudioEngine {
     this.activeNotes.set(midi, v);
   }
 
-  async pressSampled(midi) {
+  pressSampled(midi) {
     if (this.activeNotes.has(midi)) return;
-    await this.ensureSampledPiano();
+    // Samples are loaded by Enable Audio. Avoid an asynchronous attack after release.
     if (!this.sampler || !this.samplerReady) return;
 
     // Best-sounding mode: play as a normal piano note (ignore hidden stretch/detune).
@@ -304,13 +304,12 @@ export class AudioEngine {
   }
 
   release(midi, hard=false) {
-    const mode = this.ui.wave.value;
-    if (mode === 'piano_samples') {
+    const v = this.activeNotes.get(midi);
+    if (v?.kind === 'sample') {
       this.releaseSampled(midi, hard);
       return;
     }
 
-    const v = this.activeNotes.get(midi);
     if (!v) return;
     const { sustainOn } = this.getState();
     if (sustainOn && !hard) {
@@ -336,12 +335,6 @@ export class AudioEngine {
   }
 
   stopAll() {
-    const mode = this.ui.wave.value;
-    if (mode === 'piano_samples') {
-      for (const midi of Array.from(this.activeNotes.keys())) this.releaseSampled(midi, true);
-      this.activeNotes.clear();
-      return;
-    }
     for (const midi of Array.from(this.activeNotes.keys())) this.release(midi, true);
     this.activeNotes.clear();
   }
